@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["KaneGreen <737445366KG@Gmail.com>"]
 license = "Apache-2.0"
 description = "An easy-to-use lib for AES encryption and decryption, coded in pure safe Rust-lang."
+repository =  "https://github.com/KaneGreen/aes_frast"
+readme = "README.md"
+categories = ["Cryptography"]
+keywords = ["crypto", "aes"]
 
 [dependencies]
 
