@@ -1,0 +1,9 @@
+[package]
+name = "aes_frast"
+version = "0.1.0"
+authors = ["KaneGreen <737445366KG@Gmail.com>"]
+
+[dependencies]
+
+[profile.release]
+codegen-units = 1
