@@ -420,7 +420,7 @@ macro_rules! setkey_256_function {
 }
 /// Set working keys for **encryption** with auto-selected key-size.
 /// 
-/// **[Attention!]** The parameters must possess elements of the following amounts:
+/// **\[Attention!\]** The parameters must possess elements of the following amounts:
 /// 
 /// key-size | the 1st parameter | the 2nd parameter
 /// - | - | -
@@ -445,7 +445,7 @@ pub fn setkey_enc_auto(origin: &[u8], keys: &mut [u32]) {
 }
 /// Set **128**bit working keys for **encryption**.
 /// 
-/// **[Attention!]** The **first parameter** must possess **16 elements** in the slice, and the **second** **44**.
+/// **\[Attention!\]** The **first parameter** must possess **16 elements** in the slice, and the **second** **44**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::setkey_enc_k128;
@@ -480,7 +480,7 @@ pub fn setkey_enc_k128(origin: &[u8], keys: &mut [u32]) {
 }
 /// Set **192**bit working keys for **encryption**.
 /// 
-/// **[Attention!]** The **first parameter** must possess **24 elements** in the slice, and the **second** **52**.
+/// **\[Attention!\]** The **first parameter** must possess **24 elements** in the slice, and the **second** **52**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::setkey_enc_k192;
@@ -518,7 +518,7 @@ pub fn setkey_enc_k192(origin: &[u8], keys: &mut [u32]) {
 }
 /// Set **256**bit working keys for **encryption**.
 /// 
-/// **[Attention!]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
+/// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::setkey_enc_k256;
@@ -571,7 +571,7 @@ macro_rules! dkey_mixcolumn {
 }
 /// Set working keys for **decryption** with auto-selected key-size.
 /// 
-/// **[Attention!]** The parameters must possess elements of the following amounts:
+/// **\[Attention!\]** The parameters must possess elements of the following amounts:
 /// 
 /// key-size | the 1st parameter | the 2nd parameter
 /// - | - | -
@@ -605,7 +605,7 @@ pub fn setkey_dec_auto(origin: &[u8], keys: &mut [u32]) {
 }
 /// Set **128**bit working keys for **decryption**.
 /// 
-/// **[Attention!]** The **first parameter** must possess **16 elements** in the slice, and the **second** **44**.
+/// **\[Attention!\]** The **first parameter** must possess **16 elements** in the slice, and the **second** **44**.
 /// # Examples
 /// Please refer to [`setkey_enc_k128`] function, they are very similar but differ in the outputs.
 /// 
@@ -616,7 +616,7 @@ pub fn setkey_dec_k128(origin: &[u8], keys: &mut [u32]) {
 }
 /// Set **192**bit working keys for **decryption**.
 /// 
-/// **[Attention!]** The **first parameter** must possess **24 elements** in the slice, and the **second** **52**.
+/// **\[Attention!\]** The **first parameter** must possess **24 elements** in the slice, and the **second** **52**.
 /// # Examples
 /// Please refer to [`setkey_enc_k192`] function, they are very similar but differ in the outputs.
 /// 
@@ -627,7 +627,7 @@ pub fn setkey_dec_k192(origin: &[u8], keys: &mut [u32]) {
 }
 /// Set **256**bit working keys for **decryption**.
 /// 
-/// **[Attention!]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
+/// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
 /// # Examples
 /// Please refer to [`setkey_enc_k256`] function, they are very similar but differ in the outputs.
 /// 
@@ -694,7 +694,7 @@ macro_rules! encryption_function {
 }
 /// **Encrypt** a block with scheduled keys (from **128bit key**).
 /// 
-/// **[Attention!]** The **first** and **second parameters** must possess **16 elements** each in the slice, and the **third** **44**.
+/// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **44**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{setkey_enc_k128, block_enc_k128};
@@ -726,7 +726,7 @@ pub fn block_enc_k128(input: &[u8], output:&mut [u8], keys: &[u32]) {
 }
 /// **Encrypt** a block with scheduled keys (from **192bit key**).
 /// 
-/// **[Attention!]** The **first** and **second parameters** must possess **16 elements** each in the slice, and the **third** **52**.
+/// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **52**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{setkey_enc_k192, block_enc_k192};
@@ -759,7 +759,7 @@ pub fn block_enc_k192(input: &[u8], output:&mut [u8], keys: &[u32]) {
 }
 /// **Encrypt** a block with scheduled keys (from **256bit key**).
 /// 
-/// **[Attention!]** The **first** and **second parameters** must possess **16 elements** each in the slice, and the **third** **60**.
+/// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{setkey_enc_k256, block_enc_k256};
@@ -849,7 +849,7 @@ macro_rules! decryption_function {
 }
 /// **Decrypt** a block with scheduled keys (from **128bit key**).
 /// 
-/// **[Attention!]** The **first and second parameters** must possess **16 elements** each in the slice, and the **third** **44**.
+/// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **44**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{setkey_dec_k128, block_dec_k128};
@@ -881,7 +881,7 @@ pub fn block_dec_k128(input: &[u8], output:&mut [u8], keys: &[u32]) {
 }
 /// **Decrypt** a block with scheduled keys (from **192bit key**).
 /// 
-/// **[Attention!]** The **first and second parameters** must possess **16 elements** each in the slice, and the **third** **52**.
+/// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **52**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{setkey_dec_k192, block_dec_k192};
@@ -914,7 +914,7 @@ pub fn block_dec_k192(input: &[u8], output:&mut [u8], keys: &[u32]) {
 }
 /// **Decrypt** a block with scheduled keys (from **256bit key**).
 /// 
-/// **[Attention!]** The **first and second parameters** must possess **16 elements** each in the slice, and the **third** **60**.
+/// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{setkey_dec_k256, block_dec_k256};

@@ -37,7 +37,7 @@ pub fn pa_ansix923(input_vec: &mut Vec<u8>) {
 }
 /// ANSIX923 or PKCS #7 depadding  
 /// 
-/// **[Attention!]** Please be sure the parameter ends with exactly the ANSIX923 or PKCS #7 padding string.
+/// **\[Attention!\]** Please be sure the parameter ends with exactly the ANSIX923 or PKCS #7 padding string.
 /// # Examples
 /// ```
 /// use aes_frast::padding_128bit::de_ansix923_pkcs7;
@@ -69,7 +69,7 @@ pub fn de_ansix923_pkcs7(input_vec: &mut Vec<u8>) {
 /// complete block after the complete end-block, while maybe some other implements don't and only add 
 /// to the incomplete end-block. If you are looking for function like that, see [`pa_zeros_ifnotcomplete`].
 /// 
-/// **[Attention!]** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove all these zeros.
+/// **\[Attention!\]** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove all these zeros.
 /// # Examples
 /// ```
 /// use aes_frast::padding_128bit::pa_zeros;
@@ -100,7 +100,7 @@ pub fn pa_zeros(input_vec: &mut Vec<u8>) {
 /// Different from the [`pa_zeros`] function, this function only adds zeros to the incomplete end-block.
 /// When the end-block is complete, it keeps it unchanged.
 /// 
-/// **[Attention!]** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove all these zeros.
+/// **\[Attention!\]** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove all these zeros.
 /// # Examples
 /// ```
 /// use aes_frast::padding_128bit::pa_zeros_ifnotcomplete;
@@ -127,7 +127,7 @@ pub fn pa_zeros_ifnotcomplete(input_vec: &mut Vec<u8>) {
 }
 /// Zeros depadding  
 /// 
-/// **[Attention!]** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove all these zeros.
+/// **\[Attention!\]** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove all these zeros.
 /// # Examples
 /// ```
 /// use aes_frast::padding_128bit::de_zeros;

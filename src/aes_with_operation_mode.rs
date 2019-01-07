@@ -236,9 +236,9 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// ```
-/// use aes_frast::{aes_core, aes_with_operation_mode, padding_128bit};
+/// use aes_frast::{aes_core, aes_with_operation_mode};
 /// let length: usize = 64;
-/// let mut plain: Vec<u8> = vec![0x34, 0x63, 0xD0, 0x89, 0x1D, 0x71, 0x4A, 0xB0,
+/// let plain: Vec<u8> = vec![0x34, 0x63, 0xD0, 0x89, 0x1D, 0x71, 0x4A, 0xB0,
 ///                               0x08, 0x5D, 0x22, 0xE1, 0x8B, 0xFA, 0x77, 0xF0,
 ///                               0xEB, 0xE4, 0xB8, 0x9E, 0xF0, 0x05, 0x32, 0x7D,
 ///                               0x4F, 0xBD, 0x87, 0x69, 0x75, 0x76, 0x78, 0xAA,
@@ -248,12 +248,12 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 ///                               0x30, 0x53, 0x3A, 0x5F, 0xE9, 0xDF, 0x3A, 0x90];
 /// let mut cipher = vec![0u8; length];
 /// let mut dec_cipher = vec![0u8; length];
-/// let mut o_key: Vec<u8> = vec![0x0F, 0x57, 0x9F, 0x79, 0x50, 0x99, 0x0A, 0xCE,
+/// let     o_key: Vec<u8> = vec![0x0F, 0x57, 0x9F, 0x79, 0x50, 0x99, 0x0A, 0xCE,
 ///                               0x66, 0x72, 0xA8, 0x17, 0x95, 0x1F, 0xF6, 0x06,
 ///                               0x24, 0x40, 0xDE, 0xF5, 0x08, 0xF1, 0x64, 0x34,
 ///                               0xD6, 0xEF, 0xEF, 0xFD, 0x26, 0x23, 0x04, 0x95];
 /// let mut w_keys: Vec<u32> = vec![0u32; 60];
-/// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
+/// let     iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 /// 
 /// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
@@ -505,7 +505,7 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// Finally, it returns the XOR result of the final block of the cipher and the final block of the plain. 
 /// ![PCBC encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PCBC_encryption.svg/1280px-PCBC_encryption.svg.png)
 /// (This picture comes from the Wikimedia Commons)  
-/// **[Attention!]** On a message encrypted in PCBC mode, if two adjacent ciphertext blocks 
+/// **\[Attention!\]** On a message encrypted in PCBC mode, if two adjacent ciphertext blocks 
 /// are exchanged, this does not affect the decryption of subsequent blocks.
 /// # Examples
 /// ```
@@ -580,7 +580,7 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// Finally, it returns the XOR result of the final block of the cipher and the final block of the plain. 
 /// ![PCBC decryption](https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/PCBC_decryption.svg/1280px-PCBC_decryption.svg.png)
 /// (This picture comes from the Wikimedia Commons)  
-/// **[Attention!]** On a message encrypted in PCBC mode, if two adjacent ciphertext blocks 
+/// **\[Attention!\]** On a message encrypted in PCBC mode, if two adjacent ciphertext blocks 
 /// are exchanged, this does not affect the decryption of subsequent blocks.
 /// # Examples
 /// Please refer to the [`pcbc_enc`] function, codes are included there.
