@@ -236,7 +236,7 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// ```
-/// use aes_frast::{aes_core, aes_with_operation_mode};
+/// use aes_frast::{aes_core, aes_with_operation_mode  /* , padding_128bit */  };
 /// let length: usize = 64;
 /// let plain: Vec<u8> = vec![0x34, 0x63, 0xD0, 0x89, 0x1D, 0x71, 0x4A, 0xB0,
 ///                               0x08, 0x5D, 0x22, 0xE1, 0x8B, 0xFA, 0x77, 0xF0,
