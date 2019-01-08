@@ -13,7 +13,7 @@ Maybe, this lib is for somebody who just wants to know the structure of AES.
 
 ## Features
 * 128bit, 192bit, 256bit key-size and fixed 128bit block-size.
-* ECB, CBC, CFB, OFB operation mode (with experimental PCBC mode).
+* ECB, CBC, CFB, OFB operation mode (with experimental PCBC mode and CFB8 mode).
 * ANSIX923, PKCS #7, Zeros padding and depadding.
 * Single-block process.
 * Working keys scheduling.
