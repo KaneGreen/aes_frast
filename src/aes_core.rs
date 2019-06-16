@@ -639,6 +639,10 @@ pub fn setkey_dec_k256(origin: &[u8], keys: &mut [u32]) {
 // Encrypt a block.
 macro_rules! encryption_function {
     ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {
+        // These `assert` improved performance.
+        assert_eq!($input.len(), 16);
+        assert_eq!($output.len(), 16);
+        assert_eq!($keys.len(), $keys_length);
         let mut wa0: u32 = four_u8_to_u32!($input[ 0], $input[ 1], $input[ 2], $input[ 3]) ^ $keys[0];
         let mut wa1: u32 = four_u8_to_u32!($input[ 4], $input[ 5], $input[ 6], $input[ 7]) ^ $keys[1];
         let mut wa2: u32 = four_u8_to_u32!($input[ 8], $input[ 9], $input[10], $input[11]) ^ $keys[2];
@@ -794,6 +798,10 @@ pub fn block_enc_k256(input: &[u8], output:&mut [u8], keys: &[u32]) {
 // Decrypt a block.
 macro_rules! decryption_function {
     ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {{
+        // These `assert` improved performance.
+        assert_eq!($input.len(), 16);
+        assert_eq!($output.len(), 16);
+        assert_eq!($keys.len(), $keys_length);
         let mut wa0: u32 = four_u8_to_u32!($input[ 0], $input[ 1], $input[ 2], $input[ 3]) ^ $keys[$keys_length - 4];
         let mut wa1: u32 = four_u8_to_u32!($input[ 4], $input[ 5], $input[ 6], $input[ 7]) ^ $keys[$keys_length - 3];
         let mut wa2: u32 = four_u8_to_u32!($input[ 8], $input[ 9], $input[10], $input[11]) ^ $keys[$keys_length - 2];
