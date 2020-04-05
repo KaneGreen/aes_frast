@@ -1,6 +1,6 @@
 [package]
 name = "aes_frast"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2018"
 authors = ["KaneGreen <737445366KG@Gmail.com>"]
 license = "Apache-2.0"
