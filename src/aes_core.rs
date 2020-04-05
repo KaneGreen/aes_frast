@@ -380,22 +380,23 @@ macro_rules! encryption_function {
                   TE2[((wa1 >>  8) as usize) & 0xFF] ^ TE3[( wa2        as usize) & 0xFF] ^ $keys[8 * i + 7];
         }
         // final round
-        $output[ 0] = SBOX[ (wb0 >> 24) as usize        ] ^ (($keys[$keys_length - 4] >> 24) as u8);
-        $output[ 1] = SBOX[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >> 16) as u8);
-        $output[ 2] = SBOX[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >>  8) as u8);
-        $output[ 3] = SBOX[( wb3        as usize) & 0xFF] ^ ( $keys[$keys_length - 4]        as u8);
-        $output[ 4] = SBOX[ (wb1 >> 24) as usize        ] ^ (($keys[$keys_length - 3] >> 24) as u8);
-        $output[ 5] = SBOX[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >> 16) as u8);
-        $output[ 6] = SBOX[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >>  8) as u8);
-        $output[ 7] = SBOX[( wb0        as usize) & 0xFF] ^ ( $keys[$keys_length - 3]        as u8);
-        $output[ 8] = SBOX[ (wb2 >> 24) as usize        ] ^ (($keys[$keys_length - 2] >> 24) as u8);
-        $output[ 9] = SBOX[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >> 16) as u8);
-        $output[10] = SBOX[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >>  8) as u8);
-        $output[11] = SBOX[( wb1        as usize) & 0xFF] ^ ( $keys[$keys_length - 2]        as u8);
-        $output[12] = SBOX[ (wb3 >> 24) as usize        ] ^ (($keys[$keys_length - 1] >> 24) as u8);
-        $output[13] = SBOX[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >> 16) as u8);
-        $output[14] = SBOX[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >>  8) as u8);
+        // accessing array elements by index in reverse order is faster than in normal order
         $output[15] = SBOX[( wb2        as usize) & 0xFF] ^ ( $keys[$keys_length - 1]        as u8);
+        $output[14] = SBOX[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >>  8) as u8);
+        $output[13] = SBOX[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >> 16) as u8);
+        $output[12] = SBOX[ (wb3 >> 24) as usize        ] ^ (($keys[$keys_length - 1] >> 24) as u8);
+        $output[11] = SBOX[( wb1        as usize) & 0xFF] ^ ( $keys[$keys_length - 2]        as u8);
+        $output[10] = SBOX[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >>  8) as u8);
+        $output[ 9] = SBOX[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >> 16) as u8);
+        $output[ 8] = SBOX[ (wb2 >> 24) as usize        ] ^ (($keys[$keys_length - 2] >> 24) as u8);
+        $output[ 7] = SBOX[( wb0        as usize) & 0xFF] ^ ( $keys[$keys_length - 3]        as u8);
+        $output[ 6] = SBOX[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >>  8) as u8);
+        $output[ 5] = SBOX[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >> 16) as u8);
+        $output[ 4] = SBOX[ (wb1 >> 24) as usize        ] ^ (($keys[$keys_length - 3] >> 24) as u8);
+        $output[ 3] = SBOX[( wb3        as usize) & 0xFF] ^ ( $keys[$keys_length - 4]        as u8);
+        $output[ 2] = SBOX[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >>  8) as u8);
+        $output[ 1] = SBOX[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >> 16) as u8);
+        $output[ 0] = SBOX[ (wb0 >> 24) as usize        ] ^ (($keys[$keys_length - 4] >> 24) as u8);
     };
 }
 /// **Encrypt** a block with scheduled keys (from **128bit key**).
@@ -540,22 +541,23 @@ macro_rules! decryption_function {
                   TD2[((wa1 >>  8) as usize) & 0xFF] ^ TD3[( wa0        as usize) & 0xFF] ^ $keys[$keys_length - 5 - (8 * i)];
         }
         // final round
-        $output[ 0] = SINV[ (wb0 >> 24) as usize        ] ^ (($keys[0] >> 24) as u8);
-        $output[ 1] = SINV[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[0] >> 16) as u8);
-        $output[ 2] = SINV[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[0] >>  8) as u8);
-        $output[ 3] = SINV[( wb1        as usize) & 0xFF] ^ ( $keys[0]        as u8);
-        $output[ 4] = SINV[ (wb1 >> 24) as usize        ] ^ (($keys[1] >> 24) as u8);
-        $output[ 5] = SINV[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[1] >> 16) as u8);
-        $output[ 6] = SINV[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[1] >>  8) as u8);
-        $output[ 7] = SINV[( wb2        as usize) & 0xFF] ^ ( $keys[1]        as u8);
-        $output[ 8] = SINV[ (wb2 >> 24) as usize        ] ^ (($keys[2] >> 24) as u8);
-        $output[ 9] = SINV[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[2] >> 16) as u8);
-        $output[10] = SINV[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[2] >>  8) as u8);
-        $output[11] = SINV[( wb3        as usize) & 0xFF] ^ ( $keys[2]        as u8);
-        $output[12] = SINV[ (wb3 >> 24) as usize        ] ^ (($keys[3] >> 24) as u8);
-        $output[13] = SINV[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[3] >> 16) as u8);
-        $output[14] = SINV[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[3] >>  8) as u8);
+        // accessing array elements by index in reverse order is faster than in normal order
         $output[15] = SINV[( wb0        as usize) & 0xFF] ^ ( $keys[3]        as u8);
+        $output[14] = SINV[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[3] >>  8) as u8);
+        $output[13] = SINV[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[3] >> 16) as u8);
+        $output[12] = SINV[ (wb3 >> 24) as usize        ] ^ (($keys[3] >> 24) as u8);
+        $output[11] = SINV[( wb3        as usize) & 0xFF] ^ ( $keys[2]        as u8);
+        $output[10] = SINV[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[2] >>  8) as u8);
+        $output[ 9] = SINV[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[2] >> 16) as u8);
+        $output[ 8] = SINV[ (wb2 >> 24) as usize        ] ^ (($keys[2] >> 24) as u8);
+        $output[ 7] = SINV[( wb2        as usize) & 0xFF] ^ ( $keys[1]        as u8);
+        $output[ 6] = SINV[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[1] >>  8) as u8);
+        $output[ 5] = SINV[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[1] >> 16) as u8);
+        $output[ 4] = SINV[ (wb1 >> 24) as usize        ] ^ (($keys[1] >> 24) as u8);
+        $output[ 3] = SINV[( wb1        as usize) & 0xFF] ^ ( $keys[0]        as u8);
+        $output[ 2] = SINV[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[0] >>  8) as u8);
+        $output[ 1] = SINV[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[0] >> 16) as u8);
+        $output[ 0] = SINV[ (wb0 >> 24) as usize        ] ^ (($keys[0] >> 24) as u8);
     }};
 }
 /// **Decrypt** a block with scheduled keys (from **128bit key**).
