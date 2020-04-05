@@ -1,9 +1,28 @@
 //! # aes_core
-//! `aes_core` is an implement of AES crypto algorithm all coded in prue rust-lang.  
-//! It is implemented by looking-up-tables.
+//! `aes_core` is the core part of AES crypto, including key scheduling, block encryption and
+//! decryption.
+//!
+//! This module provides **low-level API**.
+//!
+//! In this library, AES is implemented by looking-up-tables.
 //! ## Attention!
-//! Please be careful the length of the slice (because the compiler won't check it), when passing it as a parameter of a function.  
-//! Otherwise, the functions will panic `at 'index out of bounds'`, or maybe even wrose.
+//! This low-level API does NOT provide error handling.
+//!
+//! Please be careful with the lengths of the slices when passing it as the parameters of a
+//! function. Otherwise, it will panic at `index out of bounds` or `assertion failed`.
+//! ## Block cipher
+//! The AES algorithm only supports 128-bit (16 bytes) block.
+//!
+//! It supports 128-bit (16 bytes), 192-bit (24 bytes) and 265-bit (32 bytes) keys.
+//!
+//! AES block crypto uses sub-keys, which are derived from a key. This derivation process is called
+//! *key schedule*.
+//!
+//! key size in bits | key size in bytes | sub-keys size in bytes
+//! - | - | -
+//! 128 | 16 | 44
+//! 192 | 24 | 52
+//! 256 | 32 | 60
 
 include!("tables.rs");
 
@@ -12,11 +31,11 @@ const N_SUBKEYS_192BIT: usize = 52;
 const N_SUBKEYS_256BIT: usize = 60;
 
 // Put four u8 numbers in big-endian order to get an u32 number.  
-// The first u8 will become the most significant bits (MSB), and the last one will be the least significant bits (LSB).
+// The first u8 will become the most significant bits (MSB), and the last one will be the least
+// significant bits (LSB).
 // # Examples
 // ```
 // let output: u32 = four_u8_to_u32!(0x1Au8, 0x2Bu8, 0x3Cu8, 0x4Du8);
-// 
 // assert_eq!(output, 0x1A2B3C4Du32);
 // ```
 macro_rules! four_u8_to_u32 {
@@ -24,6 +43,7 @@ macro_rules! four_u8_to_u32 {
         (($b0 as u32) << 24) ^ (($b1 as u32) << 16) ^ (($b2 as u32) << 8) ^ ($b3 as u32)
     }};
 }
+
 // The g function used in key schedule rounds.
 macro_rules! round_g_function {
     ($word:expr, $round:expr) => {{
@@ -35,6 +55,7 @@ macro_rules! round_g_function {
         )
     }};
 }
+
 // The h function used in 256bit key schedule rounds.
 macro_rules! round_h_function {
     ($word:expr) => {{
@@ -46,12 +67,18 @@ macro_rules! round_h_function {
         )
     }};
 }
+
 // 128bit key schedule
 macro_rules! key_schedule_128_function {
     ($origin:ident, $keys:ident) => {{
         ::std::assert_eq!($keys.len(), N_SUBKEYS_128BIT);
         for i in 0..4 {
-            $keys[i] = four_u8_to_u32!($origin[4 * i], $origin[4 * i + 1], $origin[4 * i + 2], $origin[4 * i + 3]);
+            $keys[i] = four_u8_to_u32!(
+                $origin[4 * i    ],
+                $origin[4 * i + 1],
+                $origin[4 * i + 2],
+                $origin[4 * i + 3]
+            );
         }
         for i in 0..10 {
             $keys[4 * i + 4] = $keys[4 * i    ] ^ round_g_function!($keys[4 * i + 3], i);
@@ -61,12 +88,18 @@ macro_rules! key_schedule_128_function {
         }
     }};
 }
+
 // 192bit key schedule
 macro_rules! key_schedule_192_function {
     ($origin:ident, $keys:ident) => {{
         ::std::assert_eq!($keys.len(), N_SUBKEYS_192BIT);
         for i in 0..6 {
-            $keys[i] = four_u8_to_u32!($origin[4 * i], $origin[4 * i + 1], $origin[4 * i + 2], $origin[4 * i + 3]);
+            $keys[i] = four_u8_to_u32!(
+                $origin[4 * i    ],
+                $origin[4 * i + 1],
+                $origin[4 * i + 2],
+                $origin[4 * i + 3]
+            );
         }
         for i in 0..7 {
             $keys[6 * i +  6] = $keys[6 * i    ] ^ round_g_function!($keys[6 * i + 5], i);
@@ -82,12 +115,18 @@ macro_rules! key_schedule_192_function {
         $keys[51] = $keys[45] ^ $keys[50];
     }};
 }
+
 // 256bit key schedule
 macro_rules! key_schedule_256_function {
     ($origin:ident, $keys:ident) => {{
         ::std::assert_eq!($keys.len(), N_SUBKEYS_256BIT);
         for i in 0..8 {
-            $keys[i] = four_u8_to_u32!($origin[4 * i], $origin[4 * i + 1], $origin[4 * i + 2], $origin[4 * i + 3]);
+            $keys[i] = four_u8_to_u32!(
+                $origin[4 * i    ],
+                $origin[4 * i + 1],
+                $origin[4 * i + 2],
+                $origin[4 * i + 3]
+            );
         }
         for i in 0..6 {
             $keys[8 * i +  8] = $keys[8 * i    ] ^ round_g_function!($keys[8 * i + 7], i);
@@ -105,19 +144,191 @@ macro_rules! key_schedule_256_function {
         $keys[59] = $keys[51] ^ $keys[58];
     }};
 }
-/// Set working keys for **encryption** with auto-selected key-size.
+
+// The keys for decryption need extra transform -- the inverse MixColumn.
+macro_rules! dkey_mixcolumn {
+    ($keys:ident, $length:expr) => {{
+        // The first and the last round don't need the inverse MixColumn transform
+        for i in 4..($length-4) {
+            $keys[i] = TD0[SBOX[ ($keys[i] >> 24) as usize        ] as usize] ^
+                       TD1[SBOX[(($keys[i] >> 16) as usize) & 0xFF] as usize] ^
+                       TD2[SBOX[(($keys[i] >>  8) as usize) & 0xFF] as usize] ^
+                       TD3[SBOX[( $keys[i]        as usize) & 0xFF] as usize];
+        }
+    }};
+}
+
+// Encrypt a block.
+macro_rules! encryption_function {
+    ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {
+        // These `assert` improved performance.
+        ::std::assert_eq!($input.len(), 128 / 8_usize);
+        ::std::assert_eq!($keys.len(), $keys_length);
+        let mut wa0: u32 = four_u8_to_u32!($input[ 0], $input[ 1], $input[ 2], $input[ 3]) ^
+                           $keys[0];
+        let mut wa1: u32 = four_u8_to_u32!($input[ 4], $input[ 5], $input[ 6], $input[ 7]) ^
+                           $keys[1];
+        let mut wa2: u32 = four_u8_to_u32!($input[ 8], $input[ 9], $input[10], $input[11]) ^
+                           $keys[2];
+        let mut wa3: u32 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15]) ^
+                           $keys[3];
+        // round 1
+        let mut wb0: u32 = TE0[ (wa0 >> 24) as usize        ] ^ TE1[((wa1 >> 16) as usize) & 0xFF] ^
+                           TE2[((wa2 >>  8) as usize) & 0xFF] ^ TE3[( wa3        as usize) & 0xFF] ^
+                           $keys[4];
+        let mut wb1: u32 = TE0[ (wa1 >> 24) as usize        ] ^ TE1[((wa2 >> 16) as usize) & 0xFF] ^
+                           TE2[((wa3 >>  8) as usize) & 0xFF] ^ TE3[( wa0        as usize) & 0xFF] ^
+                           $keys[5];
+        let mut wb2: u32 = TE0[ (wa2 >> 24) as usize        ] ^ TE1[((wa3 >> 16) as usize) & 0xFF] ^
+                           TE2[((wa0 >>  8) as usize) & 0xFF] ^ TE3[( wa1        as usize) & 0xFF] ^
+                           $keys[6];
+        let mut wb3: u32 = TE0[ (wa3 >> 24) as usize        ] ^ TE1[((wa0 >> 16) as usize) & 0xFF] ^
+                           TE2[((wa1 >>  8) as usize) & 0xFF] ^ TE3[( wa2        as usize) & 0xFF] ^
+                           $keys[7];
+        // round 2 to round 9 (or 11, 13)
+        for i in 1..$inner_rounds {
+            // even-number rounds
+            wa0 = TE0[ (wb0 >> 24) as usize        ] ^ TE1[((wb1 >> 16) as usize) & 0xFF] ^
+                  TE2[((wb2 >>  8) as usize) & 0xFF] ^ TE3[( wb3        as usize) & 0xFF] ^
+                  $keys[8 * i];
+            wa1 = TE0[ (wb1 >> 24) as usize        ] ^ TE1[((wb2 >> 16) as usize) & 0xFF] ^
+                  TE2[((wb3 >>  8) as usize) & 0xFF] ^ TE3[( wb0        as usize) & 0xFF] ^
+                  $keys[8 * i + 1];
+            wa2 = TE0[ (wb2 >> 24) as usize        ] ^ TE1[((wb3 >> 16) as usize) & 0xFF] ^
+                  TE2[((wb0 >>  8) as usize) & 0xFF] ^ TE3[( wb1        as usize) & 0xFF] ^
+                  $keys[8 * i + 2];
+            wa3 = TE0[ (wb3 >> 24) as usize        ] ^ TE1[((wb0 >> 16) as usize) & 0xFF] ^
+                  TE2[((wb1 >>  8) as usize) & 0xFF] ^ TE3[( wb2        as usize) & 0xFF] ^
+                  $keys[8 * i + 3];
+            // odd-number rounds
+            wb0 = TE0[ (wa0 >> 24) as usize        ] ^ TE1[((wa1 >> 16) as usize) & 0xFF] ^
+                  TE2[((wa2 >>  8) as usize) & 0xFF] ^ TE3[( wa3        as usize) & 0xFF] ^
+                  $keys[8 * i + 4];
+            wb1 = TE0[ (wa1 >> 24) as usize        ] ^ TE1[((wa2 >> 16) as usize) & 0xFF] ^
+                  TE2[((wa3 >>  8) as usize) & 0xFF] ^ TE3[( wa0        as usize) & 0xFF] ^
+                  $keys[8 * i + 5];
+            wb2 = TE0[ (wa2 >> 24) as usize        ] ^ TE1[((wa3 >> 16) as usize) & 0xFF] ^
+                  TE2[((wa0 >>  8) as usize) & 0xFF] ^ TE3[( wa1        as usize) & 0xFF] ^
+                  $keys[8 * i + 6];
+            wb3 = TE0[ (wa3 >> 24) as usize        ] ^ TE1[((wa0 >> 16) as usize) & 0xFF] ^
+                  TE2[((wa1 >>  8) as usize) & 0xFF] ^ TE3[( wa2        as usize) & 0xFF] ^
+                  $keys[8 * i + 7];
+        }
+        // final round
+        // accessing array elements by index in reverse order is faster than in normal order
+        $output[15] = SBOX[( wb2        as usize) & 0xFF] ^ ( $keys[$keys_length - 1]        as u8);
+        $output[14] = SBOX[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >>  8) as u8);
+        $output[13] = SBOX[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >> 16) as u8);
+        $output[12] = SBOX[ (wb3 >> 24) as usize        ] ^ (($keys[$keys_length - 1] >> 24) as u8);
+        $output[11] = SBOX[( wb1        as usize) & 0xFF] ^ ( $keys[$keys_length - 2]        as u8);
+        $output[10] = SBOX[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >>  8) as u8);
+        $output[ 9] = SBOX[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >> 16) as u8);
+        $output[ 8] = SBOX[ (wb2 >> 24) as usize        ] ^ (($keys[$keys_length - 2] >> 24) as u8);
+        $output[ 7] = SBOX[( wb0        as usize) & 0xFF] ^ ( $keys[$keys_length - 3]        as u8);
+        $output[ 6] = SBOX[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >>  8) as u8);
+        $output[ 5] = SBOX[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >> 16) as u8);
+        $output[ 4] = SBOX[ (wb1 >> 24) as usize        ] ^ (($keys[$keys_length - 3] >> 24) as u8);
+        $output[ 3] = SBOX[( wb3        as usize) & 0xFF] ^ ( $keys[$keys_length - 4]        as u8);
+        $output[ 2] = SBOX[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >>  8) as u8);
+        $output[ 1] = SBOX[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >> 16) as u8);
+        $output[ 0] = SBOX[ (wb0 >> 24) as usize        ] ^ (($keys[$keys_length - 4] >> 24) as u8);
+    };
+}
+
+// Decrypt a block.
+macro_rules! decryption_function {
+     ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {{
+        // These `assert` improved performance.
+        ::std::assert_eq!($input.len(), 128 / 8_usize);
+        ::std::assert_eq!($keys.len(), $keys_length);
+        let mut wa0: u32 = four_u8_to_u32!($input[ 0], $input[ 1], $input[ 2], $input[ 3]) ^
+                           $keys[$keys_length - 4];
+        let mut wa1: u32 = four_u8_to_u32!($input[ 4], $input[ 5], $input[ 6], $input[ 7]) ^
+                           $keys[$keys_length - 3];
+        let mut wa2: u32 = four_u8_to_u32!($input[ 8], $input[ 9], $input[10], $input[11]) ^
+                           $keys[$keys_length - 2];
+        let mut wa3: u32 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15]) ^
+                           $keys[$keys_length - 1];
+        // round 1
+        let mut wb0: u32 = TD0[ (wa0 >> 24) as usize        ] ^ TD1[((wa3 >> 16) as usize) & 0xFF] ^
+                           TD2[((wa2 >>  8) as usize) & 0xFF] ^ TD3[( wa1        as usize) & 0xFF] ^
+                           $keys[$keys_length - 8];
+        let mut wb1: u32 = TD0[ (wa1 >> 24) as usize        ] ^ TD1[((wa0 >> 16) as usize) & 0xFF] ^
+                           TD2[((wa3 >>  8) as usize) & 0xFF] ^ TD3[( wa2        as usize) & 0xFF] ^
+                           $keys[$keys_length - 7];
+        let mut wb2: u32 = TD0[ (wa2 >> 24) as usize        ] ^ TD1[((wa1 >> 16) as usize) & 0xFF] ^
+                           TD2[((wa0 >>  8) as usize) & 0xFF] ^ TD3[( wa3        as usize) & 0xFF] ^
+                           $keys[$keys_length - 6];
+        let mut wb3: u32 = TD0[ (wa3 >> 24) as usize        ] ^ TD1[((wa2 >> 16) as usize) & 0xFF] ^
+                           TD2[((wa1 >>  8) as usize) & 0xFF] ^ TD3[( wa0        as usize) & 0xFF] ^
+                           $keys[$keys_length - 5];
+        // round 2 to round 9 (or 11, 13)
+        for i in 1..$inner_rounds {
+            // even-number rounds
+            wa0 = TD0[ (wb0 >> 24) as usize        ] ^ TD1[((wb3 >> 16) as usize) & 0xFF] ^
+                  TD2[((wb2 >>  8) as usize) & 0xFF] ^ TD3[( wb1        as usize) & 0xFF] ^
+                  $keys[$keys_length - 4 - (8 * i)];
+            wa1 = TD0[ (wb1 >> 24) as usize        ] ^ TD1[((wb0 >> 16) as usize) & 0xFF] ^
+                  TD2[((wb3 >>  8) as usize) & 0xFF] ^ TD3[( wb2        as usize) & 0xFF] ^
+                  $keys[$keys_length - 3 - (8 * i)];
+            wa2 = TD0[ (wb2 >> 24) as usize        ] ^ TD1[((wb1 >> 16) as usize) & 0xFF] ^
+                  TD2[((wb0 >>  8) as usize) & 0xFF] ^ TD3[( wb3        as usize) & 0xFF] ^
+                  $keys[$keys_length - 2 - (8 * i)];
+            wa3 = TD0[ (wb3 >> 24) as usize        ] ^ TD1[((wb2 >> 16) as usize) & 0xFF] ^
+                  TD2[((wb1 >>  8) as usize) & 0xFF] ^ TD3[( wb0        as usize) & 0xFF] ^
+                  $keys[$keys_length - 1 - (8 * i)];
+           // odd-number rounds
+            wb0 = TD0[ (wa0 >> 24) as usize        ] ^ TD1[((wa3 >> 16) as usize) & 0xFF] ^
+                  TD2[((wa2 >>  8) as usize) & 0xFF] ^ TD3[( wa1        as usize) & 0xFF] ^
+                  $keys[$keys_length - 8 - (8 * i)];
+            wb1 = TD0[ (wa1 >> 24) as usize        ] ^ TD1[((wa0 >> 16) as usize) & 0xFF] ^
+                  TD2[((wa3 >>  8) as usize) & 0xFF] ^ TD3[( wa2        as usize) & 0xFF] ^
+                  $keys[$keys_length - 7 - (8 * i)];
+            wb2 = TD0[ (wa2 >> 24) as usize        ] ^ TD1[((wa1 >> 16) as usize) & 0xFF] ^
+                  TD2[((wa0 >>  8) as usize) & 0xFF] ^ TD3[( wa3        as usize) & 0xFF] ^
+                  $keys[$keys_length - 6 - (8 * i)];
+            wb3 = TD0[ (wa3 >> 24) as usize        ] ^ TD1[((wa2 >> 16) as usize) & 0xFF] ^
+                  TD2[((wa1 >>  8) as usize) & 0xFF] ^ TD3[( wa0        as usize) & 0xFF] ^
+                  $keys[$keys_length - 5 - (8 * i)];
+        }
+        // final round
+        // accessing array elements by index in reverse order is faster than in normal order
+        $output[15] = SINV[( wb0        as usize) & 0xFF] ^ ( $keys[3]        as u8);
+        $output[14] = SINV[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[3] >>  8) as u8);
+        $output[13] = SINV[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[3] >> 16) as u8);
+        $output[12] = SINV[ (wb3 >> 24) as usize        ] ^ (($keys[3] >> 24) as u8);
+        $output[11] = SINV[( wb3        as usize) & 0xFF] ^ ( $keys[2]        as u8);
+        $output[10] = SINV[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[2] >>  8) as u8);
+        $output[ 9] = SINV[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[2] >> 16) as u8);
+        $output[ 8] = SINV[ (wb2 >> 24) as usize        ] ^ (($keys[2] >> 24) as u8);
+        $output[ 7] = SINV[( wb2        as usize) & 0xFF] ^ ( $keys[1]        as u8);
+        $output[ 6] = SINV[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[1] >>  8) as u8);
+        $output[ 5] = SINV[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[1] >> 16) as u8);
+        $output[ 4] = SINV[ (wb1 >> 24) as usize        ] ^ (($keys[1] >> 24) as u8);
+        $output[ 3] = SINV[( wb1        as usize) & 0xFF] ^ ( $keys[0]        as u8);
+        $output[ 2] = SINV[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[0] >>  8) as u8);
+        $output[ 1] = SINV[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[0] >> 16) as u8);
+        $output[ 0] = SINV[ (wb0 >> 24) as usize        ] ^ (($keys[0] >> 24) as u8);
+    }};
+}
+
+/// Schedule a key to sub-keys for **encryption** with **auto-selected** key-size.
+/// * *parameter* `origin`: the slice that contains original key.
+/// * *parameter* `buffer`: the buffer to store the sub-keys.
 ///
-/// **\[Attention!\]** The parameters must possess elements of the following amounts:
+/// The parameters must possess elements of the following amounts:
 ///
-/// key-size | the 1st parameter | the 2nd parameter
+/// key-size | `origin` | `buffer`
 /// - | - | -
 /// 128bit | 16 | 44
 /// 192bit | 24 | 52
 /// 256bit | 32 | 60
 ///
-/// This function is an alternative to [`key_schedule_encrypt128`], [`key_schedule_encrypt192`] and [`key_schedule_encrypt256`] functions. Which one to use is up to you.
+/// This function is an alternative to [`key_schedule_encrypt128`], [`key_schedule_encrypt192`] and
+/// [`key_schedule_encrypt256`] functions. Which one to use is up to you.
 /// # Examples
-/// Please refer to [`key_schedule_encrypt128`], [`key_schedule_encrypt192`] and [`key_schedule_encrypt256`] functions, they are very similar but differ in the outputs.
+/// Please refer to [`key_schedule_encrypt128`], [`key_schedule_encrypt192`] and
+/// [`key_schedule_encrypt256`] functions, they are very similar.
 ///
 /// [`key_schedule_encrypt128`]: ../aes_core/fn.key_schedule_encrypt128.html
 /// [`key_schedule_encrypt192`]: ../aes_core/fn.key_schedule_encrypt192.html
@@ -131,9 +342,10 @@ pub fn key_schedule_encrypt_auto(origin: &[u8], buffer: &mut [u32]) {
     }
 }
 
-/// Set **128**bit working keys for **encryption**.
+/// Schedule a **128bit key** to sub-keys for **encryption**.
 ///
-/// **\[Attention!\]** The **first parameter** must possess **16 elements** in the slice, and the **second** **44**.
+/// * *parameter* `origin`: the slice (length = 16) that contains original key.
+/// * *parameter* `buffer`: the buffer (length = 44) to store the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt128;
@@ -169,9 +381,10 @@ pub fn key_schedule_encrypt128(origin: &[u8], buffer: &mut [u32]) {
     key_schedule_128_function!(origin, buffer);
 }
 
-/// Set **192**bit working keys for **encryption**.
+/// Schedule a **192bit key** to sub-keys for **encryption**.
 ///
-/// **\[Attention!\]** The **first parameter** must possess **24 elements** in the slice, and the **second** **52**.
+/// * *parameter* `origin`: the slice (length = 24) that contains original key.
+/// * *parameter* `buffer`: the buffer (length = 52) to store the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt192;
@@ -210,9 +423,10 @@ pub fn key_schedule_encrypt192(origin: &[u8], buffer: &mut [u32]) {
     key_schedule_192_function!(origin, buffer);
 }
 
-/// Set **256**bit working keys for **encryption**.
+/// Schedule a **256bit key** to sub-keys for **encryption**.
 ///
-/// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
+/// * *parameter* `origin`: the slice (length = 32) that contains original key.
+/// * *parameter* `buffer`: the buffer (length = 60) to store the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt256;
@@ -253,31 +467,24 @@ pub fn key_schedule_encrypt256(origin: &[u8], buffer: &mut [u32]) {
     assert_eq!(origin.len(), 256 / 8_usize);
     key_schedule_256_function!(origin, buffer);
 }
-// The keys for decryption need extra transform -- the inverse MixColumn.
-macro_rules! dkey_mixcolumn {
-    ($keys:ident, $length:expr) => {{
-        // The first and the last round don't need the inverse MixColumn transform
-        for i in 4..($length-4) {
-            $keys[i] = TD0[SBOX[ ($keys[i] >> 24) as usize        ] as usize] ^
-                       TD1[SBOX[(($keys[i] >> 16) as usize) & 0xFF] as usize] ^
-                       TD2[SBOX[(($keys[i] >>  8) as usize) & 0xFF] as usize] ^
-                       TD3[SBOX[( $keys[i]        as usize) & 0xFF] as usize];
-        }
-    }};
-}
-/// Set working keys for **decryption** with auto-selected key-size.
+
+/// Schedule a key to sub-keys for **decryption** with **auto-selected** key-size.
+/// * *parameter* `origin`: the slice that contains original key.
+/// * *parameter* `buffer`: the buffer to store the sub-keys.
 ///
-/// **\[Attention!\]** The parameters must possess elements of the following amounts:
+/// The parameters must possess elements of the following amounts:
 ///
-/// key-size | the 1st parameter | the 2nd parameter
+/// key-size | `origin` | `buffer`
 /// - | - | -
 /// 128bit | 16 | 44
 /// 192bit | 24 | 52
 /// 256bit | 32 | 60
 ///
-/// This function is an alternative to [`key_schedule_decrypt128`], [`key_schedule_decrypt192`] and [`key_schedule_decrypt256`] functions. Which one to use is up to you.
+/// This function is an alternative to [`key_schedule_decrypt128`], [`key_schedule_decrypt192`] and
+/// [`key_schedule_decrypt256`] functions. Which one to use is up to you.
 /// # Examples
-/// Please refer to [`key_schedule_decrypt128`], [`key_schedule_decrypt192`] and [`key_schedule_decrypt256`] functions, they are very similar but differ in the outputs.
+/// Please refer to [`key_schedule_decrypt128`], [`key_schedule_decrypt192`] and
+/// [`key_schedule_decrypt256`] functions, they are very similar.
 ///
 /// [`key_schedule_decrypt128`]: ../aes_core/fn.key_schedule_decrypt128.html
 /// [`key_schedule_decrypt192`]: ../aes_core/fn.key_schedule_decrypt192.html
@@ -300,11 +507,12 @@ pub fn key_schedule_decrypt_auto(origin: &[u8], buffer: &mut [u32]) {
     }
 }
 
-/// Set **128**bit working keys for **decryption**.
+/// Schedule a **128bit key** to sub-keys for **decryption**.
 ///
-/// **\[Attention!\]** The **first parameter** must possess **16 elements** in the slice, and the **second** **44**.
+/// * *parameter* `origin`: the slice (length = 16) that contains original key.
+/// * *parameter* `buffer`: the buffer (length = 44) to store the sub-keys.
 /// # Examples
-/// Please refer to [`key_schedule_encrypt128`] function, they are very similar but differ in the outputs.
+/// Please refer to [`key_schedule_encrypt128`] function, they are very similar.
 ///
 /// [`key_schedule_encrypt128`]: ../aes_core/fn.key_schedule_encrypt128.html
 pub fn key_schedule_decrypt128(origin: &[u8], buffer: &mut [u32]) {
@@ -313,11 +521,12 @@ pub fn key_schedule_decrypt128(origin: &[u8], buffer: &mut [u32]) {
     dkey_mixcolumn!(buffer, N_SUBKEYS_128BIT);
 }
 
-/// Set **192**bit working keys for **decryption**.
+/// Schedule a **192bit key** to sub-keys for **decryption**.
 ///
-/// **\[Attention!\]** The **first parameter** must possess **24 elements** in the slice, and the **second** **52**.
+/// * *parameter* `origin`: the slice (length = 24) that contains original key.
+/// * *parameter* `buffer`: the buffer (length = 52) to store the sub-keys.
 /// # Examples
-/// Please refer to [`key_schedule_encrypt192`] function, they are very similar but differ in the outputs.
+/// Please refer to [`key_schedule_encrypt192`] function, they are very similar
 ///
 /// [`key_schedule_encrypt192`]: ../aes_core/fn.key_schedule_encrypt192.html
 pub fn key_schedule_decrypt192(origin: &[u8], buffer: &mut [u32]) {
@@ -326,11 +535,12 @@ pub fn key_schedule_decrypt192(origin: &[u8], buffer: &mut [u32]) {
     dkey_mixcolumn!(buffer, N_SUBKEYS_192BIT);
 }
 
-/// Set **256**bit working keys for **decryption**.
+/// Schedule a **256bit key** to sub-keys for **decryption**.
 ///
-/// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
+/// * *parameter* `origin`: the slice (length = 32) that contains original key.
+/// * *parameter* `buffer`: the buffer (length = 60) to store the sub-keys.
 /// # Examples
-/// Please refer to [`key_schedule_encrypt256`] function, they are very similar but differ in the outputs.
+/// Please refer to [`key_schedule_encrypt256`] function, they are very similar
 ///
 /// [`key_schedule_encrypt256`]: ../aes_core/fn.key_schedule_encrypt256.html
 pub fn key_schedule_decrypt256(origin: &[u8], buffer: &mut [u32]) {
@@ -339,69 +549,12 @@ pub fn key_schedule_decrypt256(origin: &[u8], buffer: &mut [u32]) {
     dkey_mixcolumn!(buffer, N_SUBKEYS_256BIT);
 }
 
-// Encrypt a block.
-macro_rules! encryption_function {
-    ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {
-        // These `assert` improved performance.
-        ::std::assert_eq!($input.len(), 128 / 8_usize);
-        ::std::assert_eq!($keys.len(), $keys_length);
-        let mut wa0: u32 = four_u8_to_u32!($input[ 0], $input[ 1], $input[ 2], $input[ 3]) ^ $keys[0];
-        let mut wa1: u32 = four_u8_to_u32!($input[ 4], $input[ 5], $input[ 6], $input[ 7]) ^ $keys[1];
-        let mut wa2: u32 = four_u8_to_u32!($input[ 8], $input[ 9], $input[10], $input[11]) ^ $keys[2];
-        let mut wa3: u32 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15]) ^ $keys[3];
-        // round 1
-        let mut wb0: u32 = TE0[ (wa0 >> 24) as usize        ] ^ TE1[((wa1 >> 16) as usize) & 0xFF] ^
-                           TE2[((wa2 >>  8) as usize) & 0xFF] ^ TE3[( wa3        as usize) & 0xFF] ^ $keys[4];
-        let mut wb1: u32 = TE0[ (wa1 >> 24) as usize        ] ^ TE1[((wa2 >> 16) as usize) & 0xFF] ^
-                           TE2[((wa3 >>  8) as usize) & 0xFF] ^ TE3[( wa0        as usize) & 0xFF] ^ $keys[5];
-        let mut wb2: u32 = TE0[ (wa2 >> 24) as usize        ] ^ TE1[((wa3 >> 16) as usize) & 0xFF] ^
-                           TE2[((wa0 >>  8) as usize) & 0xFF] ^ TE3[( wa1        as usize) & 0xFF] ^ $keys[6];
-        let mut wb3: u32 = TE0[ (wa3 >> 24) as usize        ] ^ TE1[((wa0 >> 16) as usize) & 0xFF] ^
-                           TE2[((wa1 >>  8) as usize) & 0xFF] ^ TE3[( wa2        as usize) & 0xFF] ^ $keys[7];
-        // round 2 to round 9 (or 11, 13)
-        for i in 1..$inner_rounds {
-            // even-number rounds
-            wa0 = TE0[ (wb0 >> 24) as usize        ] ^ TE1[((wb1 >> 16) as usize) & 0xFF] ^
-                  TE2[((wb2 >>  8) as usize) & 0xFF] ^ TE3[( wb3        as usize) & 0xFF] ^ $keys[8 * i];
-            wa1 = TE0[ (wb1 >> 24) as usize        ] ^ TE1[((wb2 >> 16) as usize) & 0xFF] ^
-                  TE2[((wb3 >>  8) as usize) & 0xFF] ^ TE3[( wb0        as usize) & 0xFF] ^ $keys[8 * i + 1];
-            wa2 = TE0[ (wb2 >> 24) as usize        ] ^ TE1[((wb3 >> 16) as usize) & 0xFF] ^
-                  TE2[((wb0 >>  8) as usize) & 0xFF] ^ TE3[( wb1        as usize) & 0xFF] ^ $keys[8 * i + 2];
-            wa3 = TE0[ (wb3 >> 24) as usize        ] ^ TE1[((wb0 >> 16) as usize) & 0xFF] ^
-                  TE2[((wb1 >>  8) as usize) & 0xFF] ^ TE3[( wb2        as usize) & 0xFF] ^ $keys[8 * i + 3];
-            // odd-number rounds
-            wb0 = TE0[ (wa0 >> 24) as usize        ] ^ TE1[((wa1 >> 16) as usize) & 0xFF] ^
-                  TE2[((wa2 >>  8) as usize) & 0xFF] ^ TE3[( wa3        as usize) & 0xFF] ^ $keys[8 * i + 4];
-            wb1 = TE0[ (wa1 >> 24) as usize        ] ^ TE1[((wa2 >> 16) as usize) & 0xFF] ^
-                  TE2[((wa3 >>  8) as usize) & 0xFF] ^ TE3[( wa0        as usize) & 0xFF] ^ $keys[8 * i + 5];
-            wb2 = TE0[ (wa2 >> 24) as usize        ] ^ TE1[((wa3 >> 16) as usize) & 0xFF] ^
-                  TE2[((wa0 >>  8) as usize) & 0xFF] ^ TE3[( wa1        as usize) & 0xFF] ^ $keys[8 * i + 6];
-            wb3 = TE0[ (wa3 >> 24) as usize        ] ^ TE1[((wa0 >> 16) as usize) & 0xFF] ^
-                  TE2[((wa1 >>  8) as usize) & 0xFF] ^ TE3[( wa2        as usize) & 0xFF] ^ $keys[8 * i + 7];
-        }
-        // final round
-        // accessing array elements by index in reverse order is faster than in normal order
-        $output[15] = SBOX[( wb2        as usize) & 0xFF] ^ ( $keys[$keys_length - 1]        as u8);
-        $output[14] = SBOX[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >>  8) as u8);
-        $output[13] = SBOX[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 1] >> 16) as u8);
-        $output[12] = SBOX[ (wb3 >> 24) as usize        ] ^ (($keys[$keys_length - 1] >> 24) as u8);
-        $output[11] = SBOX[( wb1        as usize) & 0xFF] ^ ( $keys[$keys_length - 2]        as u8);
-        $output[10] = SBOX[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >>  8) as u8);
-        $output[ 9] = SBOX[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 2] >> 16) as u8);
-        $output[ 8] = SBOX[ (wb2 >> 24) as usize        ] ^ (($keys[$keys_length - 2] >> 24) as u8);
-        $output[ 7] = SBOX[( wb0        as usize) & 0xFF] ^ ( $keys[$keys_length - 3]        as u8);
-        $output[ 6] = SBOX[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >>  8) as u8);
-        $output[ 5] = SBOX[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 3] >> 16) as u8);
-        $output[ 4] = SBOX[ (wb1 >> 24) as usize        ] ^ (($keys[$keys_length - 3] >> 24) as u8);
-        $output[ 3] = SBOX[( wb3        as usize) & 0xFF] ^ ( $keys[$keys_length - 4]        as u8);
-        $output[ 2] = SBOX[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >>  8) as u8);
-        $output[ 1] = SBOX[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[$keys_length - 4] >> 16) as u8);
-        $output[ 0] = SBOX[ (wb0 >> 24) as usize        ] ^ (($keys[$keys_length - 4] >> 24) as u8);
-    };
-}
-/// **Encrypt** a block with scheduled keys (from **128bit key**).
+/// **Encrypt** a block with scheduled keys (from **128bit key**) in place.
 ///
-/// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **44**.
+/// Encrypt the data in `block` and write it back there, using the `subkeys`.
+///
+/// * *parameter* `block`: the slice (length = 16) that stores a block of data.
+/// * *parameter* `subkeys`: the slice (length = 44) that contains the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt128, block_encrypt128_inplace};
@@ -432,9 +585,12 @@ pub fn block_encrypt128_inplace(block: &mut [u8], subkeys: &[u32]) {
     encryption_function!(block, block, subkeys, 5, N_SUBKEYS_128BIT);
 }
 
-/// **Encrypt** a block with scheduled keys (from **192bit key**).
+/// **Encrypt** a block with scheduled keys (from **192bit key**) in place.
 ///
-/// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **52**.
+/// Encrypt the data in `block` and write it back there, using the `subkeys`.
+///
+/// * *parameter* `block`: the slice (length = 16) that stores a block of data.
+/// * *parameter* `subkeys`: the slice (length = 52) that contains the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt192, block_encrypt192_inplace};
@@ -466,9 +622,12 @@ pub fn block_encrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
     encryption_function!(block, block, subkeys, 6, N_SUBKEYS_192BIT);
 }
 
-/// **Encrypt** a block with scheduled keys (from **256bit key**).
+/// **Encrypt** a block with scheduled keys (from **256bit key**) in place.
 ///
-/// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
+/// Encrypt the data in `block` and write it back there, using the `subkeys`.
+///
+/// * *parameter* `block`: the slice (length = 16) that stores a block of data.
+/// * *parameter* `subkeys`: the slice (length = 60) that contains the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt256, block_encrypt256_inplace};
@@ -500,69 +659,13 @@ pub fn block_encrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
 pub fn block_encrypt256_inplace(block: &mut [u8], subkeys: &[u32]) {
     encryption_function!(block, block, subkeys, 7, N_SUBKEYS_256BIT);
 }
-// Decrypt a block.
-macro_rules! decryption_function {
-     ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {{
-        // These `assert` improved performance.
-        ::std::assert_eq!($input.len(), 128 / 8_usize);
-        ::std::assert_eq!($keys.len(), $keys_length);
-        let mut wa0: u32 = four_u8_to_u32!($input[ 0], $input[ 1], $input[ 2], $input[ 3]) ^ $keys[$keys_length - 4];
-        let mut wa1: u32 = four_u8_to_u32!($input[ 4], $input[ 5], $input[ 6], $input[ 7]) ^ $keys[$keys_length - 3];
-        let mut wa2: u32 = four_u8_to_u32!($input[ 8], $input[ 9], $input[10], $input[11]) ^ $keys[$keys_length - 2];
-        let mut wa3: u32 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15]) ^ $keys[$keys_length - 1];
-        // round 1
-        let mut wb0: u32 = TD0[ (wa0 >> 24) as usize        ] ^ TD1[((wa3 >> 16) as usize) & 0xFF] ^
-                           TD2[((wa2 >>  8) as usize) & 0xFF] ^ TD3[( wa1        as usize) & 0xFF] ^ $keys[$keys_length - 8];
-        let mut wb1: u32 = TD0[ (wa1 >> 24) as usize        ] ^ TD1[((wa0 >> 16) as usize) & 0xFF] ^
-                           TD2[((wa3 >>  8) as usize) & 0xFF] ^ TD3[( wa2        as usize) & 0xFF] ^ $keys[$keys_length - 7];
-        let mut wb2: u32 = TD0[ (wa2 >> 24) as usize        ] ^ TD1[((wa1 >> 16) as usize) & 0xFF] ^
-                           TD2[((wa0 >>  8) as usize) & 0xFF] ^ TD3[( wa3        as usize) & 0xFF] ^ $keys[$keys_length - 6];
-        let mut wb3: u32 = TD0[ (wa3 >> 24) as usize        ] ^ TD1[((wa2 >> 16) as usize) & 0xFF] ^
-                           TD2[((wa1 >>  8) as usize) & 0xFF] ^ TD3[( wa0        as usize) & 0xFF] ^ $keys[$keys_length - 5];
-        // round 2 to round 9 (or 11, 13)
-        for i in 1..$inner_rounds {
-            // even-number rounds
-            wa0 = TD0[ (wb0 >> 24) as usize        ] ^ TD1[((wb3 >> 16) as usize) & 0xFF] ^
-                  TD2[((wb2 >>  8) as usize) & 0xFF] ^ TD3[( wb1        as usize) & 0xFF] ^ $keys[$keys_length - 4 - (8 * i)];
-            wa1 = TD0[ (wb1 >> 24) as usize        ] ^ TD1[((wb0 >> 16) as usize) & 0xFF] ^
-                  TD2[((wb3 >>  8) as usize) & 0xFF] ^ TD3[( wb2        as usize) & 0xFF] ^ $keys[$keys_length - 3 - (8 * i)];
-            wa2 = TD0[ (wb2 >> 24) as usize        ] ^ TD1[((wb1 >> 16) as usize) & 0xFF] ^
-                  TD2[((wb0 >>  8) as usize) & 0xFF] ^ TD3[( wb3        as usize) & 0xFF] ^ $keys[$keys_length - 2 - (8 * i)];
-            wa3 = TD0[ (wb3 >> 24) as usize        ] ^ TD1[((wb2 >> 16) as usize) & 0xFF] ^
-                  TD2[((wb1 >>  8) as usize) & 0xFF] ^ TD3[( wb0        as usize) & 0xFF] ^ $keys[$keys_length - 1 - (8 * i)];
-           // odd-number rounds
-            wb0 = TD0[ (wa0 >> 24) as usize        ] ^ TD1[((wa3 >> 16) as usize) & 0xFF] ^
-                  TD2[((wa2 >>  8) as usize) & 0xFF] ^ TD3[( wa1        as usize) & 0xFF] ^ $keys[$keys_length - 8 - (8 * i)];
-            wb1 = TD0[ (wa1 >> 24) as usize        ] ^ TD1[((wa0 >> 16) as usize) & 0xFF] ^
-                  TD2[((wa3 >>  8) as usize) & 0xFF] ^ TD3[( wa2        as usize) & 0xFF] ^ $keys[$keys_length - 7 - (8 * i)];
-            wb2 = TD0[ (wa2 >> 24) as usize        ] ^ TD1[((wa1 >> 16) as usize) & 0xFF] ^
-                  TD2[((wa0 >>  8) as usize) & 0xFF] ^ TD3[( wa3        as usize) & 0xFF] ^ $keys[$keys_length - 6 - (8 * i)];
-            wb3 = TD0[ (wa3 >> 24) as usize        ] ^ TD1[((wa2 >> 16) as usize) & 0xFF] ^
-                  TD2[((wa1 >>  8) as usize) & 0xFF] ^ TD3[( wa0        as usize) & 0xFF] ^ $keys[$keys_length - 5 - (8 * i)];
-        }
-        // final round
-        // accessing array elements by index in reverse order is faster than in normal order
-        $output[15] = SINV[( wb0        as usize) & 0xFF] ^ ( $keys[3]        as u8);
-        $output[14] = SINV[((wb1 >>  8) as usize) & 0xFF] ^ (($keys[3] >>  8) as u8);
-        $output[13] = SINV[((wb2 >> 16) as usize) & 0xFF] ^ (($keys[3] >> 16) as u8);
-        $output[12] = SINV[ (wb3 >> 24) as usize        ] ^ (($keys[3] >> 24) as u8);
-        $output[11] = SINV[( wb3        as usize) & 0xFF] ^ ( $keys[2]        as u8);
-        $output[10] = SINV[((wb0 >>  8) as usize) & 0xFF] ^ (($keys[2] >>  8) as u8);
-        $output[ 9] = SINV[((wb1 >> 16) as usize) & 0xFF] ^ (($keys[2] >> 16) as u8);
-        $output[ 8] = SINV[ (wb2 >> 24) as usize        ] ^ (($keys[2] >> 24) as u8);
-        $output[ 7] = SINV[( wb2        as usize) & 0xFF] ^ ( $keys[1]        as u8);
-        $output[ 6] = SINV[((wb3 >>  8) as usize) & 0xFF] ^ (($keys[1] >>  8) as u8);
-        $output[ 5] = SINV[((wb0 >> 16) as usize) & 0xFF] ^ (($keys[1] >> 16) as u8);
-        $output[ 4] = SINV[ (wb1 >> 24) as usize        ] ^ (($keys[1] >> 24) as u8);
-        $output[ 3] = SINV[( wb1        as usize) & 0xFF] ^ ( $keys[0]        as u8);
-        $output[ 2] = SINV[((wb2 >>  8) as usize) & 0xFF] ^ (($keys[0] >>  8) as u8);
-        $output[ 1] = SINV[((wb3 >> 16) as usize) & 0xFF] ^ (($keys[0] >> 16) as u8);
-        $output[ 0] = SINV[ (wb0 >> 24) as usize        ] ^ (($keys[0] >> 24) as u8);
-    }};
-}
-/// **Decrypt** a block with scheduled keys (from **128bit key**).
+
+/// **Decrypt** a block with scheduled keys (from **128bit key**) in place.
 ///
-/// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **44**.
+/// Decrypt the data in `block` and write it back there, using the `subkeys`.
+///
+/// * *parameter* `block`: the slice (length = 16) that stores a block of data.
+/// * *parameter* `subkeys`: the slice (length = 44) that contains the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt128, block_decrypt128_inplace};
@@ -593,9 +696,12 @@ pub fn block_decrypt128_inplace(block: &mut [u8], subkeys: &[u32]) {
     decryption_function!(block, block, subkeys, 5, N_SUBKEYS_128BIT);
 }
 
-/// **Decrypt** a block with scheduled keys (from **192bit key**).
+/// **Decrypt** a block with scheduled keys (from **192bit key**) in place.
 ///
-/// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **52**.
+/// Decrypt the data in `block` and write it back there, using the `subkeys`.
+///
+/// * *parameter* `block`: the slice (length = 16) that stores a block of data.
+/// * *parameter* `subkeys`: the slice (length = 52) that contains the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt192, block_decrypt192_inplace};
@@ -627,9 +733,12 @@ pub fn block_decrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
     decryption_function!(block, block, subkeys, 6, N_SUBKEYS_192BIT);
 }
 
-/// **Decrypt** a block with scheduled keys (from **256bit key**).
+/// **Decrypt** a block with scheduled keys (from **256bit key**) in place.
 ///
-/// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
+/// Decrypt the data in `block` and write it back there, using the `subkeys`.
+///
+/// * *parameter* `block`: the slice (length = 16) that stores a block of data.
+/// * *parameter* `subkeys`: the slice (length = 60) that contains the sub-keys.
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt256, block_decrypt256_inplace};
@@ -660,6 +769,246 @@ pub fn block_decrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// ```
 pub fn block_decrypt256_inplace(block: &mut [u8], subkeys: &[u32]) {
     decryption_function!(block, block, subkeys, 7, N_SUBKEYS_256BIT);
+}
+
+/// **Encrypt** a block with scheduled keys (from **128bit key**).
+///
+/// Encrypt the data in `input` and write it to `output`, using the `subkeys`.
+///
+/// * *parameter* `input`: the slice (length = 16) that stores a block of input data.
+/// * *parameter* `output`: the buffer (length = 16) to store the output data.
+/// * *parameter* `subkeys`: the slice (length = 44) that contains the sub-keys.
+/// # Examples
+/// ```
+/// use aes_frast::aes_core::{key_schedule_encrypt128, block_encrypt128};
+/// const N_SUBKEYS_128BIT: usize = 44;
+///
+/// let input_data: [u8; 16] = [
+///     0x32, 0x43, 0xF6, 0xA8, 0x88, 0x5A, 0x30, 0x8D,
+///     0x31, 0x31, 0x98, 0xA2, 0xE0, 0x37, 0x07, 0x34
+/// ];
+/// let mut output_buffer: [u8; 16] = [0; 16];
+///
+/// let origin_key: [u8; 16] = [
+///     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
+///     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C
+/// ];
+/// let mut subkeys: [u32; N_SUBKEYS_128BIT] = [0; N_SUBKEYS_128BIT];
+///
+/// key_schedule_encrypt128(&origin_key, &mut subkeys);
+/// block_encrypt128(&input_data,&mut output_buffer, &subkeys);
+///
+/// let expected: [u8; 16] = [
+///     0x39, 0x25, 0x84, 0x1D, 0x02, 0xDC, 0x09, 0xFB,
+///     0xDC, 0x11, 0x85, 0x97, 0x19, 0x6A, 0x0B, 0x32
+/// ];
+/// for i in 0..16 {
+///     assert_eq!(output_buffer[i], expected[i]);
+/// }
+/// ```
+pub fn block_encrypt128(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
+    encryption_function!(input, output, subkeys, 5, N_SUBKEYS_128BIT);
+}
+
+/// **Encrypt** a block with scheduled keys (from **192bit key**).
+///
+/// Encrypt the data in `input` and write it to `output`, using the `subkeys`.
+///
+/// * *parameter* `input`: the slice (length = 16) that stores a block of input data.
+/// * *parameter* `output`: the buffer (length = 16) to store the output data.
+/// * *parameter* `subkeys`: the slice (length = 52) that contains the sub-keys.
+/// # Examples
+/// ```
+/// use aes_frast::aes_core::{key_schedule_encrypt192, block_encrypt192};
+/// const N_SUBKEYS_192BIT: usize = 52;
+///
+/// let input_data: [u8; 16] = [
+///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
+/// ];
+/// let mut output_buffer: [u8; 16] = [0; 16];
+///
+/// let origin_key: [u8; 24] = [
+///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
+/// ];
+/// let mut subkeys: [u32; N_SUBKEYS_192BIT] = [0; N_SUBKEYS_192BIT];
+///
+/// key_schedule_encrypt192(&origin_key, &mut subkeys);
+/// block_encrypt192(&input_data, &mut output_buffer, &subkeys);
+///
+/// let expected: [u8; 16] = [
+///     0xDD, 0xA9, 0x7C, 0xA4, 0x86, 0x4C, 0xDF, 0xE0,
+///     0x6E, 0xAF, 0x70, 0xA0, 0xEC, 0x0D, 0x71, 0x91
+/// ];
+/// for i in 0..16 {
+///     assert_eq!(output_buffer[i], expected[i]);
+/// }
+/// ```
+pub fn block_encrypt192(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
+    encryption_function!(input, output, subkeys, 6, N_SUBKEYS_192BIT);
+}
+
+/// **Encrypt** a block with scheduled keys (from **256bit key**).
+///
+/// Encrypt the data in `input` and write it to `output`, using the `subkeys`.
+///
+/// * *parameter* `input`: the slice (length = 16) that stores a block of input data.
+/// * *parameter* `output`: the buffer (length = 16) to store the output data.
+/// * *parameter* `subkeys`: the slice (length = 60) that contains the sub-keys.
+/// # Examples
+/// ```
+/// use aes_frast::aes_core::{key_schedule_encrypt256, block_encrypt256};
+/// const N_SUBKEYS_256BIT: usize = 60;
+///
+/// let input_data: [u8; 16] = [
+///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
+/// ];
+/// let mut output_buffer: [u8; 16] = [0; 16];
+///
+/// let origin_key: [u8; 32] = [
+///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+///     0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
+/// ];
+/// let mut subkeys: [u32; N_SUBKEYS_256BIT] = [0; N_SUBKEYS_256BIT];
+///
+/// key_schedule_encrypt256(&origin_key, &mut subkeys);
+/// block_encrypt256(&input_data, &mut output_buffer, &subkeys);
+///
+/// let expected: [u8; 16] = [
+///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
+///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89
+/// ];
+/// for i in 0..16 {
+///     assert_eq!(output_buffer[i], expected[i]);
+/// }
+/// ```
+pub fn block_encrypt256(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
+    encryption_function!(input, output, subkeys, 7, N_SUBKEYS_256BIT);
+}
+
+/// **Decrypt** a block with scheduled keys (from **128bit key**).
+///
+/// Decrypt the data in `input` and write it to `output`, using the `subkeys`.
+///
+/// * *parameter* `input`: the slice (length = 16) that stores a block of input data.
+/// * *parameter* `output`: the buffer (length = 16) to store the output data.
+/// * *parameter* `subkeys`: the slice (length = 44) that contains the sub-keys.
+/// # Examples
+/// ```
+/// use aes_frast::aes_core::{key_schedule_decrypt128, block_decrypt128};
+/// const N_SUBKEYS_128BIT: usize = 44;
+///
+/// let input_data: [u8; 16] = [
+///     0x39, 0x25, 0x84, 0x1D, 0x02, 0xDC, 0x09, 0xFB,
+///     0xDC, 0x11, 0x85, 0x97, 0x19, 0x6A, 0x0B, 0x32
+/// ];
+/// let mut output_buffer: [u8; 16] = [0; 16];
+///
+/// let origin_key: [u8; 16] = [
+///     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
+///     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C
+/// ];
+/// let mut subkeys: [u32; N_SUBKEYS_128BIT] = [0; N_SUBKEYS_128BIT];
+///
+/// key_schedule_decrypt128(&origin_key, &mut subkeys);
+/// block_decrypt128(&input_data, &mut output_buffer, &subkeys);
+///
+/// let expected: [u8; 16] = [
+///     0x32, 0x43, 0xF6, 0xA8, 0x88, 0x5A, 0x30, 0x8D,
+///     0x31, 0x31, 0x98, 0xA2, 0xE0, 0x37, 0x07, 0x34
+/// ];
+/// for i in 0..16 {
+///     assert_eq!(output_buffer[i], expected[i]);
+/// }
+/// ```
+pub fn block_decrypt128(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
+    decryption_function!(input, output, subkeys, 5, N_SUBKEYS_128BIT);
+}
+
+/// **Decrypt** a block with scheduled keys (from **192bit key**).
+///
+/// Decrypt the data in `input` and write it to `output`, using the `subkeys`.
+///
+/// * *parameter* `input`: the slice (length = 16) that stores a block of input data.
+/// * *parameter* `output`: the buffer (length = 16) to store the output data.
+/// * *parameter* `subkeys`: the slice (length = 52) that contains the sub-keys.
+/// # Examples
+/// ```
+/// use aes_frast::aes_core::{key_schedule_decrypt192, block_decrypt192};
+/// const N_SUBKEYS_192BIT: usize = 52;
+///
+/// let input_data: [u8; 16] = [
+///     0xDD, 0xA9, 0x7C, 0xA4, 0x86, 0x4C, 0xDF, 0xE0,
+///     0x6E, 0xAF, 0x70, 0xA0, 0xEC, 0x0D, 0x71, 0x91
+/// ];
+/// let mut output_buffer: [u8; 16] = [0; 16];
+///
+/// let origin_key: [u8; 24] = [
+///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
+/// ];
+/// let mut subkeys: [u32; N_SUBKEYS_192BIT] = [0; N_SUBKEYS_192BIT];
+///
+/// key_schedule_decrypt192(&origin_key, &mut subkeys);
+/// block_decrypt192(&input_data, &mut output_buffer, &subkeys);
+///
+/// let expected: [u8; 16] = [
+///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
+/// ];
+/// for i in 0..16 {
+///     assert_eq!(output_buffer[i], expected[i]);
+/// }
+/// ```
+pub fn block_decrypt192(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
+    decryption_function!(input, output, subkeys, 6, N_SUBKEYS_192BIT);
+}
+
+/// **Decrypt** a block with scheduled keys (from **256bit key**).
+///
+/// Decrypt the data in `input` and write it to `output`, using the `subkeys`.
+///
+/// * *parameter* `input`: the slice (length = 16) that stores a block of input data.
+/// * *parameter* `output`: the buffer (length = 16) to store the output data.
+/// * *parameter* `subkeys`: the slice (length = 60) that contains the sub-keys.
+/// # Examples
+/// ```
+/// use aes_frast::aes_core::{key_schedule_decrypt256, block_decrypt256};
+/// const N_SUBKEYS_256BIT: usize = 60;
+///
+/// let input_data: [u8; 16] = [
+///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
+///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89
+/// ];
+/// let mut output_buffer: [u8; 16] = [0; 16];
+///
+/// let origin_key: [u8; 32] = [
+///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+///     0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
+/// ];
+/// let mut subkeys: [u32; N_SUBKEYS_256BIT] = [0; N_SUBKEYS_256BIT];
+///
+/// key_schedule_decrypt256(&origin_key, &mut subkeys);
+/// block_decrypt256(&input_data, &mut output_buffer, &subkeys);
+///
+/// let expected: [u8; 16] = [
+///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
+/// ];
+/// for i in 0..16 {
+///     assert_eq!(output_buffer[i], expected[i]);
+/// }
+/// ```
+pub fn block_decrypt256(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
+    decryption_function!(input, output, subkeys, 7, N_SUBKEYS_256BIT);
 }
 
 #[cfg(test)]
