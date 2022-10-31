@@ -29,7 +29,7 @@ use std::mem;
 ///                               0x0A, 0xB6, 0xE0, 0xCD, 0xBD, 0xDD, 0xCC, 0x2E];
 /// let mut w_keys: Vec<u32> = vec![0u32; 60];
 ///
-/// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// padding_128bit::pa_pkcs7(&mut plain);
 /// aes_with_operation_mode::ecb_enc(&plain, &mut cipher, &w_keys);
 ///
@@ -48,7 +48,7 @@ use std::mem;
 ///     assert_eq!(expected_encrypted[i], cipher[i]);
 /// }
 ///
-/// aes_core::setkey_dec_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::ecb_dec(&cipher, &mut dec_cipher, &w_keys);
 /// padding_128bit::de_ansix923_pkcs7(&mut dec_cipher);
 ///
@@ -59,9 +59,9 @@ use std::mem;
 /// ```
 pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     // `>> 4` is the same as `/ 16` and `<< 4` is the same as `* 4`.
@@ -88,9 +88,9 @@ pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// [`ecb_enc`]: ../aes_with_operation_mode/fn.ecb_enc.html
 pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
     let decryptor = match keys.len() {
-        44 => aes_core::block_dec_k128,
-        52 => aes_core::block_dec_k192,
-        60 => aes_core::block_dec_k256,
+        44 => aes_core::block_decrypt128,
+        52 => aes_core::block_decrypt192,
+        60 => aes_core::block_decrypt256,
         _ => panic!("Invalid key length."),
     };
     let block_number: usize = cipher.len() >> 4;
@@ -133,7 +133,7 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
-/// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// padding_128bit::pa_pkcs7(&mut plain);
 /// aes_with_operation_mode::cbc_enc(&plain, &mut cipher, &w_keys, &iv);
 ///
@@ -152,7 +152,7 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 ///     assert_eq!(expected_encrypted[i], cipher[i]);
 /// }
 ///
-/// aes_core::setkey_dec_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::cbc_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
 /// padding_128bit::de_ansix923_pkcs7(&mut dec_cipher);
 ///
@@ -162,9 +162,9 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// ```
 pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let block_number: usize = plain.len() >> 4;
@@ -199,9 +199,9 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// [`cbc_enc`]: ../aes_with_operation_mode/fn.cbc_enc.html
 pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let decryptor = match keys.len() {
-        44 => aes_core::block_dec_k128,
-        52 => aes_core::block_dec_k192,
-        60 => aes_core::block_dec_k256,
+        44 => aes_core::block_decrypt128,
+        52 => aes_core::block_decrypt192,
+        60 => aes_core::block_decrypt256,
         _ => panic!("Invalid key length."),
     };
     let block_number: usize = cipher.len() >> 4;
@@ -255,7 +255,7 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// let     iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
-/// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::cfb_enc(&plain, &mut cipher, &w_keys, &iv);
 ///
 /// let expected_encrypted = vec![0x9D, 0xF9, 0x3D, 0x71, 0xC1, 0x9E, 0x50, 0x22,
@@ -272,8 +272,8 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// }
 ///
 /// // Notice: CFB only uses block-encryption, no matter we use it as encryption or decryption.
-/// // So, keep don't use functions which start with`setkey_dec_` and keep the next line commented out.
-/// //aes_core::setkey_dec_auto(&o_key, &mut w_keys);
+/// // So, keep don't use functions which start with`key_schedule_decrypt_` and keep the next line commented out.
+/// //aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::cfb_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
 ///
 /// for i in 0..length {
@@ -282,9 +282,9 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// ```
 pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let block_number: usize = plain.len() >> 4;
@@ -342,9 +342,9 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     // in the last line. Both functions return `&cipher[start..(start + 16)]`, which is the first
     // parameter in this function, while it's the second parameter in the `cfb_enc` function.
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let block_number: usize = plain.len() >> 4;
@@ -388,8 +388,8 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// This function encrypts a long plain from the first parameter and put the long cipher
 /// into the second parameter, using the scheduled keys and the initialization vector (IV)
 /// in the third and fourth parameters.  
-/// However, if you use the corresponding [`setkey_dec_auto`], [`setkey_dec_k128`], [`setkey_dec_k192`]
-/// or [`setkey_dec_k256`] function to schedule the keys, and then use this function again,
+/// However, if you use the corresponding [`key_schedule_decrypt_auto`], [`key_schedule_decrypt128`], [`key_schedule_decrypt192`]
+/// or [`key_schedule_decrypt256`] function to schedule the keys, and then use this function again,
 /// it will decrypt the first parameter into the second parameter.  
 /// Finally, it returns the final block of the encryptor output (neither the plain nor cipher).  
 /// ![OFB encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/OFB_encryption.svg/1280px-OFB_encryption.svg.png)
@@ -417,7 +417,7 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
-/// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::ofb_enc_dec(&plain, &mut cipher, &w_keys, &iv);
 ///
 /// let expected_encrypted = vec![0x9D, 0xF9, 0x3D, 0x71, 0xC1, 0x9E, 0x50, 0x22,
@@ -434,24 +434,24 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// }
 ///
 /// // Notice: OFB only uses block-encryption, no matter we use it as encryption or decryption.
-/// // So, keep don't use functions which start with`setkey_dec_` and keep the next line commented out.
-/// //aes_core::setkey_dec_auto(&o_key, &mut w_keys);
+/// // So, keep don't use functions which start with`key_schedule_decrypt_` and keep the next line commented out.
+/// //aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::ofb_enc_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
-/// 
+///
 /// for i in 0..length {
 ///     assert_eq!(plain[i], dec_cipher[i], "ERROR in decrypt {}", i);
 /// }
 /// ```
 ///
-/// [`setkey_dec_auto`]: ../aes_core/fn.setkey_dec_auto.html
-/// [`setkey_dec_k128`]: ../aes_core/fn.setkey_dec_k128.html
-/// [`setkey_dec_k192`]: ../aes_core/fn.setkey_dec_k192.html
-/// [`setkey_dec_k256`]: ../aes_core/fn.setkey_dec_k256.html
+/// [`key_schedule_decrypt_auto`]: ../aes_core/fn.key_schedule_decrypt_auto.html
+/// [`key_schedule_decrypt128`]: ../aes_core/fn.key_schedule_decrypt128.html
+/// [`key_schedule_decrypt192`]: ../aes_core/fn.key_schedule_decrypt192.html
+/// [`key_schedule_decrypt256`]: ../aes_core/fn.key_schedule_decrypt256.html
 pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let block_number: usize = input.len() >> 4;
@@ -522,11 +522,11 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
-/// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// padding_128bit::pa_pkcs7(&mut plain);
 /// aes_with_operation_mode::cbc_enc(&plain, &mut cipher, &w_keys, &iv);
 ///
-/// aes_core::setkey_dec_auto(&o_key, &mut w_keys);
+/// aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::cbc_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
 /// padding_128bit::de_ansix923_pkcs7(&mut dec_cipher);
 ///
@@ -536,9 +536,9 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// ```
 pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let mut buffer = vec![0u8; 16];
@@ -578,9 +578,9 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// [`pcbc_enc`]: ../aes_with_operation_mode/fn.pcbc_enc.html
 pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let decryptor = match keys.len() {
-        44 => aes_core::block_dec_k128,
-        52 => aes_core::block_dec_k192,
-        60 => aes_core::block_dec_k256,
+        44 => aes_core::block_decrypt128,
+        52 => aes_core::block_decrypt192,
+        60 => aes_core::block_decrypt256,
         _ => panic!("Invalid key length."),
     };
     let mut buffer = vec![0u8; 16];
@@ -634,8 +634,8 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 ///                               0xC0, 0x36, 0x00, 0x72, 0xDE, 0x59, 0x1F, 0x10,
 ///                               0xE6, 0x8A, 0xE5, 0x32, 0x88, 0x0B, 0x02, 0x95,
 ///                               0x26, 0x66, 0xD1, 0x48, 0x42, 0x58, 0xED, 0xF7];
-/// 
-/// aes_core::setkey_enc_auto(&o_key, &mut w_keys);
+///
+/// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 ///
 /// aes_with_operation_mode::cfb_8_enc(&plain, &mut cipher, &w_keys, &iv);
 ///
@@ -644,8 +644,8 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// }
 ///
 /// // Notice: CFB only uses block-encryption, no matter we use it as encryption or decryption.
-/// // So, keep don't use functions which start with`setkey_dec_` and keep the next line commented out.
-/// //aes_core::setkey_dec_auto(&o_key, &mut w_keys);
+/// // So, keep don't use functions which start with`key_schedule_decrypt_` and keep the next line commented out.
+/// //aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
 /// aes_with_operation_mode::cfb_8_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
 ///
 /// for i in 0..length {
@@ -654,9 +654,9 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// ```
 pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let mut out_buffer = vec![0u8; 16];
@@ -676,9 +676,9 @@ pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Ve
 /// [`cfb_8_enc`]: ../aes_with_operation_mode/fn.cfb_8_enc.html
 pub fn cfb_8_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = match keys.len() {
-        44 => aes_core::block_enc_k128,
-        52 => aes_core::block_enc_k192,
-        60 => aes_core::block_enc_k256,
+        44 => aes_core::block_encrypt128,
+        52 => aes_core::block_encrypt192,
+        60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
     let mut out_buffer = vec![0u8; 16];
