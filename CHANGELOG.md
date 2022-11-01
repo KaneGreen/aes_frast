@@ -1,5 +1,11 @@
 #  Change Log
 
+## 0.2.0 (2022-11-01)
+* **BREAK CHANGES**: function name changed!
+* Improve performance (internal implementation changed).
+* Add in-place functions for low-level API.
+* Look-up-tables are calculated in compile time.
+
 ## 0.1.5 (2019-06-16)
 * Improve performance (very little).
 
