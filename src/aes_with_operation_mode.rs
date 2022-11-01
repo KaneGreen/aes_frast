@@ -45,7 +45,7 @@ use std::mem;
 ///                               0x27, 0x56, 0x65, 0x6B, 0xFE, 0x68, 0x5F, 0xF3];
 ///
 /// for i in 0..(length + 16) {
-///     assert_eq!(expected_encrypted[i], cipher[i]);
+///     assert_eq!(expected_encrypted[i], cipher[i], "ERROR in encrypt {}", i);
 /// }
 ///
 /// aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
@@ -54,7 +54,7 @@ use std::mem;
 ///
 ///
 /// for i in 0..length {
-///     assert_eq!(plain[i], dec_cipher[i]);
+///     assert_eq!(plain[i], dec_cipher[i], "ERROR in decrypt {}", i);
 /// }
 /// ```
 pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
@@ -65,10 +65,10 @@ pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
         _ => panic!("Invalid key length."),
     };
     // `>> 4` is the same as `/ 16` and `<< 4` is the same as `* 4`.
-    let block_number: usize = plain.len() >> 4;
-    let mut start: usize = 0;
-    let mut end: usize = 16;
-    for i in 0usize..block_number {
+    let block_number = plain.len() >> 4;
+    let mut start = 0;
+    let mut end = 16;
+    for i in 0..block_number {
         start = i << 4;
         end = start + 16;
         encryptor(&plain[start..end], &mut cipher[start..end], keys);
@@ -93,10 +93,10 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
         60 => aes_core::block_decrypt256,
         _ => panic!("Invalid key length."),
     };
-    let block_number: usize = cipher.len() >> 4;
-    let mut start: usize = 0;
-    let mut end: usize = 16;
-    for i in 0usize..block_number {
+    let block_number = cipher.len() >> 4;
+    let mut start = 0;
+    let mut end = 16;
+    for i in 0..block_number {
         start = i << 4;
         end = start + 16;
         decryptor(&cipher[start..end], &mut plain[start..end], keys);
@@ -149,7 +149,7 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 ///                               0x77, 0x8E, 0x50, 0xE7, 0x03, 0xEA, 0x70, 0x2A];
 ///
 /// for i in 0..(length + 16) {
-///     assert_eq!(expected_encrypted[i], cipher[i]);
+///     assert_eq!(expected_encrypted[i], cipher[i], "ERROR in encrypt {}", i);
 /// }
 ///
 /// aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
@@ -157,7 +157,7 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// padding_128bit::de_ansix923_pkcs7(&mut dec_cipher);
 ///
 /// for i in 0..length {
-///     assert_eq!(plain[i], dec_cipher[i]);
+///     assert_eq!(plain[i], dec_cipher[i], "ERROR in decrypt {}", i);
 /// }
 /// ```
 pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
@@ -167,7 +167,6 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
-    let block_number: usize = plain.len() >> 4;
     let mut buffer: [u8; 16] = [0; 16];
     // The 1st (head) block
     for j in 0..16 {
@@ -175,8 +174,9 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     }
     encryptor(&buffer, &mut cipher[0..16], keys);
     // The other blocks
-    let mut start: usize = 0;
-    for i in 1usize..block_number {
+    let block_number = plain.len() >> 4;
+    let mut start = 0;
+    for i in 1..block_number {
         start = i << 4;
         for j in 0..16 {
             buffer[j] = cipher[start + j - 16] ^ plain[start + j];
@@ -204,7 +204,6 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         60 => aes_core::block_decrypt256,
         _ => panic!("Invalid key length."),
     };
-    let block_number: usize = cipher.len() >> 4;
     let mut buffer: [u8; 16] = [0; 16];
     // The 1st (head) block
     decryptor(&cipher[0..16], &mut buffer, keys);
@@ -212,8 +211,9 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         plain[j] = iv[j] ^ buffer[j];
     }
     // The other blocks
-    let mut start: usize = 0;
-    for i in 1usize..block_number {
+    let block_number = cipher.len() >> 4;
+    let mut start = 0;
+    for i in 1..block_number {
         start = i << 4;
         decryptor(&cipher[start..(start + 16)], &mut buffer, keys);
         for j in 0..16 {
@@ -287,19 +287,19 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
-    let block_number: usize = plain.len() >> 4;
     let mut buffer: [u8; 16] = [0; 16];
     // If input has only one block, consider it as the last block, not the 1st.
     // If input has only two blocks, consider it has no middle blocks.
     // The 1st (head) block
     encryptor(iv, &mut buffer, keys);
-    let mut start: usize = 0;
+    let block_number = plain.len() >> 4;
+    let mut start = 0;
     if plain.len() >= 16 {
         for j in 0..16 {
             cipher[j] = buffer[j] ^ plain[j];
         }
         // The middle blocks
-        for i in 1usize..block_number {
+        for i in 1..block_number {
             start = i << 4;
             encryptor(&cipher[(start - 16)..start], &mut buffer, keys);
             for j in 0..16 {
@@ -347,11 +347,11 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
-    let block_number: usize = plain.len() >> 4;
     let mut buffer: [u8; 16] = [0; 16];
     // The 1st (head) block
     encryptor(iv, &mut buffer, keys);
-    let mut start: usize = 0;
+    let block_number = plain.len() >> 4;
+    let mut start = 0;
     if cipher.len() >= 16 {
         for j in 0..16 {
             plain[j] = buffer[j] ^ cipher[j]
@@ -454,18 +454,18 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
         60 => aes_core::block_encrypt256,
         _ => panic!("Invalid key length."),
     };
-    let block_number: usize = input.len() >> 4;
     let mut buffer_new = vec![0u8; 16];
     let mut buffer_last = vec![0u8; 16];
     // The 1st (head) block
     encryptor(iv, &mut buffer_new, keys);
-    let mut start: usize;
+    let block_number = input.len() >> 4;
+    let mut start;
     if input.len() >= 16 {
         for j in 0..16 {
             output[j] = buffer_new[j] ^ input[j]
         }
         // The middle blocks
-        for i in 1usize..block_number {
+        for i in 1..block_number {
             start = i << 4;
             mem::swap(&mut buffer_new, &mut buffer_last);
             encryptor(&buffer_last, &mut buffer_new, keys);
@@ -548,9 +548,9 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
     }
     encryptor(&buffer, &mut cipher[0..16], keys);
     // The other blocks
-    let block_number: usize = plain.len() >> 4;
-    let mut start: usize = 0;
-    for i in 1usize..block_number {
+    let block_number = plain.len() >> 4;
+    let mut start = 0;
+    for i in 1..block_number {
         start = i << 4;
         for j in 0..16 {
             buffer[j] = cipher[start + j - 16] ^ plain[start + j - 16] ^ plain[start + j];
@@ -590,8 +590,8 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
         plain[j] = iv[j] ^ buffer[j];
     }
     // The other block
-    let block_number: usize = cipher.len() >> 4;
-    let mut start: usize = 0;
+    let block_number = cipher.len() >> 4;
+    let mut start = 0;
     for i in 1usize..block_number {
         start = i << 4;
         decryptor(&cipher[start..(start + 16)], &mut buffer, keys);
@@ -660,7 +660,7 @@ pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Ve
         _ => panic!("Invalid key length."),
     };
     let mut out_buffer = vec![0u8; 16];
-    let mut in_buffer: Vec<u8> = iv.to_owned();
+    let mut in_buffer = iv.to_owned();
     for i in 0..plain.len() {
         encryptor(&in_buffer, &mut out_buffer, keys);
         cipher[i] = out_buffer[0] ^ plain[i];
@@ -682,7 +682,7 @@ pub fn cfb_8_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Ve
         _ => panic!("Invalid key length."),
     };
     let mut out_buffer = vec![0u8; 16];
-    let mut in_buffer: Vec<u8> = iv.to_owned();
+    let mut in_buffer = iv.to_owned();
     for i in 0..cipher.len() {
         encryptor(&in_buffer, &mut out_buffer, keys);
         plain[i] = out_buffer[0] ^ cipher[i];
