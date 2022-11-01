@@ -222,7 +222,7 @@ pub fn de_zeros(input_vec: &mut Vec<u8>) -> usize {
 pub fn drop_last_block(input_vec: &mut Vec<u8>) -> usize {
     let r = match input_vec.len() & 0b1111 {
         0 => 16,
-        r @ _ => r,
+        r => r,
     };
     input_vec.truncate(input_vec.len() - r);
     r

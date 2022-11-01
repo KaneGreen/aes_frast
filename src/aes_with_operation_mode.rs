@@ -292,7 +292,7 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     // If input has only one block, consider it as the last block, not the 1st.
     // If input has only two blocks, consider it has no middle blocks.
     // The 1st (head) block
-    encryptor(&iv, &mut buffer, keys);
+    encryptor(iv, &mut buffer, keys);
     let mut start: usize = 0;
     if plain.len() >= 16 {
         for j in 0..16 {
@@ -350,7 +350,7 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     let block_number: usize = plain.len() >> 4;
     let mut buffer: [u8; 16] = [0; 16];
     // The 1st (head) block
-    encryptor(&iv, &mut buffer, keys);
+    encryptor(iv, &mut buffer, keys);
     let mut start: usize = 0;
     if cipher.len() >= 16 {
         for j in 0..16 {
@@ -458,7 +458,7 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
     let mut buffer_new = vec![0u8; 16];
     let mut buffer_last = vec![0u8; 16];
     // The 1st (head) block
-    encryptor(&iv, &mut buffer_new, keys);
+    encryptor(iv, &mut buffer_new, keys);
     let mut start: usize;
     if input.len() >= 16 {
         for j in 0..16 {

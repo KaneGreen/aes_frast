@@ -24,7 +24,7 @@
 //! 192 | 24 | 52
 //! 256 | 32 | 60
 
-include!("tables.rs");
+include!(concat!(env!("OUT_DIR"), "/tables.rs"));
 
 /// Sub-keys size from 128bit key, which is 44.
 pub const N_SUBKEYS_128BIT: usize = 44;
