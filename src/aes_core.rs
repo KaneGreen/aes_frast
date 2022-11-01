@@ -33,47 +33,43 @@ pub const N_SUBKEYS_192BIT: usize = 52;
 /// Sub-keys size from 256bit key, which is 60.
 pub const N_SUBKEYS_256BIT: usize = 60;
 
-// Put four u8 numbers in big-endian order to get an u32 number.
-// The first u8 will become the most significant bits (MSB), and the last one will be the least
-// significant bits (LSB). To a certain extent, these are similar to `u32::from_be_bytes`.
+// Put four u8 numbers in little-endian order to get an u32 number.
+// The first u8 will become the least significant bits (LSB), and the last one
+// will be the most significant bits (MSB).
+// To a certain extent, these are similar to `u32::from_le_bytes`.
 // # Examples
 // ```
 // let output: u32 = four_u8_to_u32!(0x11u8, 0x22u8, 0x33u8, 0x44u8);
-// assert_eq!(output, 0x11223344u32);
+// assert_eq!(output, 0x44332211u32);
 // ```
 macro_rules! four_u8_to_u32 {
     ($b0:expr, $b1:expr, $b2:expr, $b3:expr) => {
-        (((($b0) as u32) << 24) | ((($b1) as u32) << 16) | ((($b2) as u32) << 8) | (($b3) as u32))
-    };
-}
-macro_rules! u8_b0_of_u32 {
-    ($w:expr) => {
-        ((($w) >> 24) as u8)
-    };
-}
-macro_rules! u8_b1_of_u32 {
-    ($w:expr) => {
-        ((($w) >> 16) as u8)
-    };
-}
-macro_rules! u8_b2_of_u32 {
-    ($w:expr) => {
-        ((($w) >> 8) as u8)
+        (((($b3) as u32) << 24) | ((($b2) as u32) << 16) | ((($b1) as u32) << 8) | (($b0) as u32))
     };
 }
 macro_rules! u8_b3_of_u32 {
     ($w:expr) => {
+        ((($w) >> 24) as u8)
+    };
+}
+macro_rules! u8_b2_of_u32 {
+    ($w:expr) => {
+        ((($w) >> 16) as u8)
+    };
+}
+macro_rules! u8_b1_of_u32 {
+    ($w:expr) => {
+        ((($w) >> 8) as u8)
+    };
+}
+macro_rules! u8_b0_of_u32 {
+    ($w:expr) => {
         (($w) as u8)
     };
 }
-macro_rules! usize_b0_of_u32 {
+macro_rules! usize_b3_of_u32 {
     ($w:expr) => {
         ((($w) >> 24) as usize)
-    };
-}
-macro_rules! usize_b1_of_u32 {
-    ($w:expr) => {
-        (u8_b1_of_u32!($w) as usize)
     };
 }
 macro_rules! usize_b2_of_u32 {
@@ -81,9 +77,14 @@ macro_rules! usize_b2_of_u32 {
         (u8_b2_of_u32!($w) as usize)
     };
 }
-macro_rules! usize_b3_of_u32 {
+macro_rules! usize_b1_of_u32 {
     ($w:expr) => {
-        (u8_b3_of_u32!($w) as usize)
+        (u8_b1_of_u32!($w) as usize)
+    };
+}
+macro_rules! usize_b0_of_u32 {
+    ($w:expr) => {
+        (u8_b0_of_u32!($w) as usize)
     };
 }
 
@@ -440,6 +441,7 @@ pub fn key_schedule_encrypt_auto(origin: &[u8], buffer: &mut [u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt128;
+/// use aes_frast::misc::hex;
 /// const N_SUBKEYS_128BIT: usize = 44;
 ///
 /// // This example key came from NIST.FIPS.197 Appendix A.1
@@ -452,17 +454,17 @@ pub fn key_schedule_encrypt_auto(origin: &[u8], buffer: &mut [u32]) {
 /// key_schedule_encrypt128(&origin_key, &mut subkeys);
 ///
 /// let expected: [u32; N_SUBKEYS_128BIT] = [
-///     0x2B7E1516, 0x28AED2A6, 0xABF71588, 0x09CF4F3C,
-///     0xA0FAFE17, 0x88542CB1, 0x23A33939, 0x2A6C7605,
-///     0xF2C295F2, 0x7A96B943, 0x5935807A, 0x7359F67F,
-///     0x3D80477D, 0x4716FE3E, 0x1E237E44, 0x6D7A883B,
-///     0xEF44A541, 0xA8525B7F, 0xB671253B, 0xDB0BAD00,
-///     0xD4D1C6F8, 0x7C839D87, 0xCAF2B8BC, 0x11F915BC,
-///     0x6D88A37A, 0x110B3EFD, 0xDBF98641, 0xCA0093FD,
-///     0x4E54F70E, 0x5F5FC9F3, 0x84A64FB2, 0x4EA6DC4F,
-///     0xEAD27321, 0xB58DBAD2, 0x312BF560, 0x7F8D292F,
-///     0xAC7766F3, 0x19FADC21, 0x28D12941, 0x575C006E,
-///     0xD014F9A8, 0xC9EE2589, 0xE13F0CC8, 0xB6630CA6,
+///     hex("2B7E1516"), hex("28AED2A6"), hex("ABF71588"), hex("09CF4F3C"),
+///     hex("A0FAFE17"), hex("88542CB1"), hex("23A33939"), hex("2A6C7605"),
+///     hex("F2C295F2"), hex("7A96B943"), hex("5935807A"), hex("7359F67F"),
+///     hex("3D80477D"), hex("4716FE3E"), hex("1E237E44"), hex("6D7A883B"),
+///     hex("EF44A541"), hex("A8525B7F"), hex("B671253B"), hex("DB0BAD00"),
+///     hex("D4D1C6F8"), hex("7C839D87"), hex("CAF2B8BC"), hex("11F915BC"),
+///     hex("6D88A37A"), hex("110B3EFD"), hex("DBF98641"), hex("CA0093FD"),
+///     hex("4E54F70E"), hex("5F5FC9F3"), hex("84A64FB2"), hex("4EA6DC4F"),
+///     hex("EAD27321"), hex("B58DBAD2"), hex("312BF560"), hex("7F8D292F"),
+///     hex("AC7766F3"), hex("19FADC21"), hex("28D12941"), hex("575C006E"),
+///     hex("D014F9A8"), hex("C9EE2589"), hex("E13F0CC8"), hex("B6630CA6"),
 /// ];
 /// for i in 0..N_SUBKEYS_128BIT {
 ///     assert_eq!(subkeys[i], expected[i]);
@@ -480,6 +482,7 @@ pub fn key_schedule_encrypt128(origin: &[u8], buffer: &mut [u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt192;
+/// use aes_frast::misc::hex;
 /// const N_SUBKEYS_192BIT: usize = 52;
 ///
 /// // This example key came from NIST.FIPS.197 Appendix A.2
@@ -493,19 +496,19 @@ pub fn key_schedule_encrypt128(origin: &[u8], buffer: &mut [u32]) {
 /// key_schedule_encrypt192(&origin_key, &mut subkeys);
 ///
 /// let expected: [u32; N_SUBKEYS_192BIT] = [
-///     0x8E73B0F7, 0xDA0E6452, 0xC810F32B, 0x809079E5,
-///     0x62F8EAD2, 0x522C6B7B, 0xFE0C91F7, 0x2402F5A5,
-///     0xEC12068E, 0x6C827F6B, 0x0E7A95B9, 0x5C56FEC2,
-///     0x4DB7B4BD, 0x69B54118, 0x85A74796, 0xE92538FD,
-///     0xE75FAD44, 0xBB095386, 0x485AF057, 0x21EFB14F,
-///     0xA448F6D9, 0x4D6DCE24, 0xAA326360, 0x113B30E6,
-///     0xA25E7ED5, 0x83B1CF9A, 0x27F93943, 0x6A94F767,
-///     0xC0A69407, 0xD19DA4E1, 0xEC1786EB, 0x6FA64971,
-///     0x485F7032, 0x22CB8755, 0xE26D1352, 0x33F0B7B3,
-///     0x40BEEB28, 0x2F18A259, 0x6747D26B, 0x458C553E,
-///     0xA7E1466C, 0x9411F1DF, 0x821F750A, 0xAD07D753,
-///     0xCA400538, 0x8FCC5006, 0x282D166A, 0xBC3CE7B5,
-///     0xE98BA06F, 0x448C773C, 0x8ECC7204, 0x01002202,
+///     hex("8E73B0F7"), hex("DA0E6452"), hex("C810F32B"), hex("809079E5"),
+///     hex("62F8EAD2"), hex("522C6B7B"), hex("FE0C91F7"), hex("2402F5A5"),
+///     hex("EC12068E"), hex("6C827F6B"), hex("0E7A95B9"), hex("5C56FEC2"),
+///     hex("4DB7B4BD"), hex("69B54118"), hex("85A74796"), hex("E92538FD"),
+///     hex("E75FAD44"), hex("BB095386"), hex("485AF057"), hex("21EFB14F"),
+///     hex("A448F6D9"), hex("4D6DCE24"), hex("AA326360"), hex("113B30E6"),
+///     hex("A25E7ED5"), hex("83B1CF9A"), hex("27F93943"), hex("6A94F767"),
+///     hex("C0A69407"), hex("D19DA4E1"), hex("EC1786EB"), hex("6FA64971"),
+///     hex("485F7032"), hex("22CB8755"), hex("E26D1352"), hex("33F0B7B3"),
+///     hex("40BEEB28"), hex("2F18A259"), hex("6747D26B"), hex("458C553E"),
+///     hex("A7E1466C"), hex("9411F1DF"), hex("821F750A"), hex("AD07D753"),
+///     hex("CA400538"), hex("8FCC5006"), hex("282D166A"), hex("BC3CE7B5"),
+///     hex("E98BA06F"), hex("448C773C"), hex("8ECC7204"), hex("01002202"),
 /// ];
 /// for i in 0..N_SUBKEYS_192BIT {
 ///     assert_eq!(subkeys[i], expected[i]);
@@ -523,6 +526,7 @@ pub fn key_schedule_encrypt192(origin: &[u8], buffer: &mut [u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt256;
+/// use aes_frast::misc::hex;
 /// const N_SUBKEYS_256BIT: usize = 60;
 ///
 /// // This example key came from NIST.FIPS.197 Appendix A.3
@@ -537,21 +541,21 @@ pub fn key_schedule_encrypt192(origin: &[u8], buffer: &mut [u32]) {
 /// key_schedule_encrypt256(&origin_key, &mut subkeys);
 ///
 /// let expected: [u32; N_SUBKEYS_256BIT] = [
-///     0x603DEB10, 0x15CA71BE, 0x2B73AEF0, 0x857D7781,
-///     0x1F352C07, 0x3B6108D7, 0x2D9810A3, 0x0914DFF4,
-///     0x9BA35411, 0x8E6925AF, 0xA51A8B5F, 0x2067FCDE,
-///     0xA8B09C1A, 0x93D194CD, 0xBE49846E, 0xB75D5B9A,
-///     0xD59AECB8, 0x5BF3C917, 0xFEE94248, 0xDE8EBE96,
-///     0xB5A9328A, 0x2678A647, 0x98312229, 0x2F6C79B3,
-///     0x812C81AD, 0xDADF48BA, 0x24360AF2, 0xFAB8B464,
-///     0x98C5BFC9, 0xBEBD198E, 0x268C3BA7, 0x09E04214,
-///     0x68007BAC, 0xB2DF3316, 0x96E939E4, 0x6C518D80,
-///     0xC814E204, 0x76A9FB8A, 0x5025C02D, 0x59C58239,
-///     0xDE136967, 0x6CCC5A71, 0xFA256395, 0x9674EE15,
-///     0x5886CA5D, 0x2E2F31D7, 0x7E0AF1FA, 0x27CF73C3,
-///     0x749C47AB, 0x18501DDA, 0xE2757E4F, 0x7401905A,
-///     0xCAFAAAE3, 0xE4D59B34, 0x9ADF6ACE, 0xBD10190D,
-///     0xFE4890D1, 0xE6188D0B, 0x046DF344, 0x706C631E,
+///     hex("603DEB10"), hex("15CA71BE"), hex("2B73AEF0"), hex("857D7781"),
+///     hex("1F352C07"), hex("3B6108D7"), hex("2D9810A3"), hex("0914DFF4"),
+///     hex("9BA35411"), hex("8E6925AF"), hex("A51A8B5F"), hex("2067FCDE"),
+///     hex("A8B09C1A"), hex("93D194CD"), hex("BE49846E"), hex("B75D5B9A"),
+///     hex("D59AECB8"), hex("5BF3C917"), hex("FEE94248"), hex("DE8EBE96"),
+///     hex("B5A9328A"), hex("2678A647"), hex("98312229"), hex("2F6C79B3"),
+///     hex("812C81AD"), hex("DADF48BA"), hex("24360AF2"), hex("FAB8B464"),
+///     hex("98C5BFC9"), hex("BEBD198E"), hex("268C3BA7"), hex("09E04214"),
+///     hex("68007BAC"), hex("B2DF3316"), hex("96E939E4"), hex("6C518D80"),
+///     hex("C814E204"), hex("76A9FB8A"), hex("5025C02D"), hex("59C58239"),
+///     hex("DE136967"), hex("6CCC5A71"), hex("FA256395"), hex("9674EE15"),
+///     hex("5886CA5D"), hex("2E2F31D7"), hex("7E0AF1FA"), hex("27CF73C3"),
+///     hex("749C47AB"), hex("18501DDA"), hex("E2757E4F"), hex("7401905A"),
+///     hex("CAFAAAE3"), hex("E4D59B34"), hex("9ADF6ACE"), hex("BD10190D"),
+///     hex("FE4890D1"), hex("E6188D0B"), hex("046DF344"), hex("706C631E"),
 /// ];
 /// for i in 0..N_SUBKEYS_256BIT {
 ///     assert_eq!(subkeys[i], expected[i]);
@@ -1120,6 +1124,7 @@ pub fn block_decrypt256(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::misc::hex;
 
     #[test]
     fn key_schedule_decrypt128_works() {
@@ -1130,13 +1135,50 @@ mod tests {
         let mut subkeys: [u32; N_SUBKEYS_128BIT] = [0; N_SUBKEYS_128BIT];
         key_schedule_decrypt128(&origin_key, &mut subkeys);
         let expected: [u32; N_SUBKEYS_128BIT] = [
-            0x2B7E1516, 0x28AED2A6, 0xABF71588, 0x09CF4F3C, 0x2B3708A7, 0xF262D405, 0xBC3EBDBF,
-            0x4B617D62, 0xCC7505EB, 0x3E17D1EE, 0x82296C51, 0xC9481133, 0x7C1F13F7, 0x4208C219,
-            0xC021AE48, 0x0969BF7B, 0x90884413, 0xD280860A, 0x12A12842, 0x1BC89739, 0x6EA30AFC,
-            0xBC238CF6, 0xAE82A4B4, 0xB54A338D, 0x6EFCD876, 0xD2DF5480, 0x7C5DF034, 0xC917C3B9,
-            0x12C07647, 0xC01F22C7, 0xBC42D2F3, 0x7555114A, 0xDF7D925A, 0x1F62B09D, 0xA320626E,
-            0xD6757324, 0x0C7B5A63, 0x1319EAFE, 0xB0398890, 0x664CFBB4, 0xD014F9A8, 0xC9EE2589,
-            0xE13F0CC8, 0xB6630CA6,
+            hex("2B7E1516"),
+            hex("28AED2A6"),
+            hex("ABF71588"),
+            hex("09CF4F3C"),
+            hex("2B3708A7"),
+            hex("F262D405"),
+            hex("BC3EBDBF"),
+            hex("4B617D62"),
+            hex("CC7505EB"),
+            hex("3E17D1EE"),
+            hex("82296C51"),
+            hex("C9481133"),
+            hex("7C1F13F7"),
+            hex("4208C219"),
+            hex("C021AE48"),
+            hex("0969BF7B"),
+            hex("90884413"),
+            hex("D280860A"),
+            hex("12A12842"),
+            hex("1BC89739"),
+            hex("6EA30AFC"),
+            hex("BC238CF6"),
+            hex("AE82A4B4"),
+            hex("B54A338D"),
+            hex("6EFCD876"),
+            hex("D2DF5480"),
+            hex("7C5DF034"),
+            hex("C917C3B9"),
+            hex("12C07647"),
+            hex("C01F22C7"),
+            hex("BC42D2F3"),
+            hex("7555114A"),
+            hex("DF7D925A"),
+            hex("1F62B09D"),
+            hex("A320626E"),
+            hex("D6757324"),
+            hex("0C7B5A63"),
+            hex("1319EAFE"),
+            hex("B0398890"),
+            hex("664CFBB4"),
+            hex("D014F9A8"),
+            hex("C9EE2589"),
+            hex("E13F0CC8"),
+            hex("B6630CA6"),
         ];
         for i in 0..N_SUBKEYS_128BIT {
             assert_eq!(subkeys[i], expected[i]);
@@ -1152,14 +1194,58 @@ mod tests {
         let mut subkeys: [u32; N_SUBKEYS_192BIT] = [0; N_SUBKEYS_192BIT];
         key_schedule_decrypt192(&origin_key, &mut subkeys);
         let expected: [u32; N_SUBKEYS_192BIT] = [
-            0x8E73B0F7, 0xDA0E6452, 0xC810F32B, 0x809079E5, 0x9EB149C4, 0x79D69C5D, 0xFEB4A27C,
-            0xEAB6D7FD, 0x659763E7, 0x8C817087, 0x12303943, 0x6BE6A51E, 0x41B34544, 0xAB0592B9,
-            0xCE92F15E, 0x421381D9, 0x5023B89A, 0x3BC51D84, 0xD04B1937, 0x7B4E8B8E, 0xB5DC7AD0,
-            0xF7CFFB09, 0xA7EC4393, 0x9C295E17, 0xC5DDB7F8, 0xBE933C76, 0x0B4F46A6, 0xFC80BDAF,
-            0x5B6CFE3C, 0xC745A02B, 0xF8B9A572, 0x462A9904, 0x4D65DFA2, 0xB1E5620D, 0xEA899C31,
-            0x2DCC3C1A, 0xF3B42258, 0xB59EBB5C, 0xF8FB64FE, 0x491E06F3, 0xA3979AC2, 0x8E5BA6D8,
-            0xE12CC9E6, 0x54B272BA, 0xAC491644, 0xE55710B7, 0x46C08A75, 0xC89B2CAD, 0xE98BA06F,
-            0x448C773C, 0x8ECC7204, 0x01002202,
+            hex("8E73B0F7"),
+            hex("DA0E6452"),
+            hex("C810F32B"),
+            hex("809079E5"),
+            hex("9EB149C4"),
+            hex("79D69C5D"),
+            hex("FEB4A27C"),
+            hex("EAB6D7FD"),
+            hex("659763E7"),
+            hex("8C817087"),
+            hex("12303943"),
+            hex("6BE6A51E"),
+            hex("41B34544"),
+            hex("AB0592B9"),
+            hex("CE92F15E"),
+            hex("421381D9"),
+            hex("5023B89A"),
+            hex("3BC51D84"),
+            hex("D04B1937"),
+            hex("7B4E8B8E"),
+            hex("B5DC7AD0"),
+            hex("F7CFFB09"),
+            hex("A7EC4393"),
+            hex("9C295E17"),
+            hex("C5DDB7F8"),
+            hex("BE933C76"),
+            hex("0B4F46A6"),
+            hex("FC80BDAF"),
+            hex("5B6CFE3C"),
+            hex("C745A02B"),
+            hex("F8B9A572"),
+            hex("462A9904"),
+            hex("4D65DFA2"),
+            hex("B1E5620D"),
+            hex("EA899C31"),
+            hex("2DCC3C1A"),
+            hex("F3B42258"),
+            hex("B59EBB5C"),
+            hex("F8FB64FE"),
+            hex("491E06F3"),
+            hex("A3979AC2"),
+            hex("8E5BA6D8"),
+            hex("E12CC9E6"),
+            hex("54B272BA"),
+            hex("AC491644"),
+            hex("E55710B7"),
+            hex("46C08A75"),
+            hex("C89B2CAD"),
+            hex("E98BA06F"),
+            hex("448C773C"),
+            hex("8ECC7204"),
+            hex("01002202"),
         ];
         for i in 0..N_SUBKEYS_192BIT {
             assert_eq!(subkeys[i], expected[i]);
@@ -1176,15 +1262,66 @@ mod tests {
         let mut subkeys: [u32; N_SUBKEYS_256BIT] = [0; N_SUBKEYS_256BIT];
         key_schedule_decrypt256(&origin_key, &mut subkeys);
         let expected: [u32; N_SUBKEYS_256BIT] = [
-            0x603DEB10, 0x15CA71BE, 0x2B73AEF0, 0x857D7781, 0x8EC6BFF6, 0x829CA03B, 0x9E49AF7E,
-            0xDBA96125, 0x42107758, 0xE9EC98F0, 0x66329EA1, 0x93F8858B, 0x4A7459F9, 0xC8E8F9C2,
-            0x56A156BC, 0x8D083799, 0x6C3D6329, 0x85D1FBD9, 0xE3E36578, 0x701BE0F3, 0x54FB808B,
-            0x9C137949, 0xCAB22FF5, 0x47BA186C, 0x25BA3C22, 0xA06BC7FB, 0x4388A283, 0x33934270,
-            0xD669A733, 0x4A7ADE7A, 0x80C8F18F, 0xC772E9E3, 0xC440B289, 0x642B7572, 0x27A3D7F1,
-            0x14309581, 0x32526C36, 0x7828B24C, 0xF8E043C3, 0x3F92AA20, 0x34AD1E44, 0x50866B36,
-            0x7725BCC7, 0x63152946, 0xB668B621, 0xCE40046D, 0x36A047AE, 0x0932ED8E, 0x57C96CF6,
-            0x074F07C0, 0x706ABB07, 0x137F9241, 0xADA23F49, 0x63E23B24, 0x55427C8A, 0x5C709104,
-            0xFE4890D1, 0xE6188D0B, 0x046DF344, 0x706C631E,
+            hex("603DEB10"),
+            hex("15CA71BE"),
+            hex("2B73AEF0"),
+            hex("857D7781"),
+            hex("8EC6BFF6"),
+            hex("829CA03B"),
+            hex("9E49AF7E"),
+            hex("DBA96125"),
+            hex("42107758"),
+            hex("E9EC98F0"),
+            hex("66329EA1"),
+            hex("93F8858B"),
+            hex("4A7459F9"),
+            hex("C8E8F9C2"),
+            hex("56A156BC"),
+            hex("8D083799"),
+            hex("6C3D6329"),
+            hex("85D1FBD9"),
+            hex("E3E36578"),
+            hex("701BE0F3"),
+            hex("54FB808B"),
+            hex("9C137949"),
+            hex("CAB22FF5"),
+            hex("47BA186C"),
+            hex("25BA3C22"),
+            hex("A06BC7FB"),
+            hex("4388A283"),
+            hex("33934270"),
+            hex("D669A733"),
+            hex("4A7ADE7A"),
+            hex("80C8F18F"),
+            hex("C772E9E3"),
+            hex("C440B289"),
+            hex("642B7572"),
+            hex("27A3D7F1"),
+            hex("14309581"),
+            hex("32526C36"),
+            hex("7828B24C"),
+            hex("F8E043C3"),
+            hex("3F92AA20"),
+            hex("34AD1E44"),
+            hex("50866B36"),
+            hex("7725BCC7"),
+            hex("63152946"),
+            hex("B668B621"),
+            hex("CE40046D"),
+            hex("36A047AE"),
+            hex("0932ED8E"),
+            hex("57C96CF6"),
+            hex("074F07C0"),
+            hex("706ABB07"),
+            hex("137F9241"),
+            hex("ADA23F49"),
+            hex("63E23B24"),
+            hex("55427C8A"),
+            hex("5C709104"),
+            hex("FE4890D1"),
+            hex("E6188D0B"),
+            hex("046DF344"),
+            hex("706C631E"),
         ];
         for i in 0..N_SUBKEYS_256BIT {
             assert_eq!(subkeys[i], expected[i]);
