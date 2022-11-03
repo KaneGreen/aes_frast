@@ -1,7 +1,27 @@
 //! # aes_with_operation_mode
 //! `aes_with_operation_mode` allows you to use AES with operation modes like CBC, CFB and so on.  
-use super::aes_core;
+use super::aes_core::{self, BLOCKSIZE_IN_BYTES};
 use std::mem;
+macro_rules! select_encrypt_function {
+    ($key:ident) => {
+        match $key.len() {
+            aes_core::N_SUBKEYS_128BIT => aes_core::block_encrypt128,
+            aes_core::N_SUBKEYS_192BIT => aes_core::block_encrypt192,
+            aes_core::N_SUBKEYS_256BIT => aes_core::block_encrypt256,
+            _ => panic!("Invalid key length."),
+        }
+    };
+}
+macro_rules! select_decrypt_function {
+    ($key:ident) => {
+        match $key.len() {
+            aes_core::N_SUBKEYS_128BIT => aes_core::block_decrypt128,
+            aes_core::N_SUBKEYS_192BIT => aes_core::block_decrypt192,
+            aes_core::N_SUBKEYS_256BIT => aes_core::block_decrypt256,
+            _ => panic!("Invalid key length."),
+        }
+    };
+}
 /// ECB (Electronic Codebook) Encryption
 ///
 /// This function encrypts a long plain from the first parameter and put the long cipher
@@ -12,6 +32,7 @@ use std::mem;
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode, padding_128bit};
+/// use aes_frast::N_SUBKEYS_256BIT;
 /// let length: usize = 64;
 /// let mut plain: Vec<u8> = vec![0x4E, 0xFD, 0x06, 0xB2, 0xCE, 0xEE, 0x59, 0x02,
 ///                               0xCA, 0xE8, 0x4E, 0x58, 0xFC, 0x50, 0x92, 0x1E,
@@ -27,7 +48,7 @@ use std::mem;
 ///                               0x86, 0x2D, 0xC1, 0x5A, 0x8E, 0xFA, 0xBE, 0xD4,
 ///                               0x3B, 0x52, 0x28, 0x78, 0xE2, 0x49, 0x1F, 0x86,
 ///                               0x0A, 0xB6, 0xE0, 0xCD, 0xBD, 0xDD, 0xCC, 0x2E];
-/// let mut w_keys: Vec<u32> = vec![0u32; 60];
+/// let mut w_keys: Vec<u32> = vec![0u32; N_SUBKEYS_256BIT];
 ///
 /// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// padding_128bit::pa_pkcs7(&mut plain);
@@ -58,19 +79,14 @@ use std::mem;
 /// }
 /// ```
 pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
+    let encryptor = select_encrypt_function!(keys);
     // `>> 4` is the same as `/ 16` and `<< 4` is the same as `* 4`.
     let block_number = plain.len() >> 4;
     let mut start = 0;
-    let mut end = 16;
+    let mut end = BLOCKSIZE_IN_BYTES;
     for i in 0..block_number {
         start = i << 4;
-        end = start + 16;
+        end = start + BLOCKSIZE_IN_BYTES;
         encryptor(&plain[start..end], &mut cipher[start..end], keys);
     }
     cipher[start..end].to_owned()
@@ -87,18 +103,13 @@ pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
 ///
 /// [`ecb_enc`]: ../aes_with_operation_mode/fn.ecb_enc.html
 pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
-    let decryptor = match keys.len() {
-        44 => aes_core::block_decrypt128,
-        52 => aes_core::block_decrypt192,
-        60 => aes_core::block_decrypt256,
-        _ => panic!("Invalid key length."),
-    };
+    let decryptor = select_decrypt_function!(keys);
     let block_number = cipher.len() >> 4;
     let mut start = 0;
-    let mut end = 16;
+    let mut end = BLOCKSIZE_IN_BYTES;
     for i in 0..block_number {
         start = i << 4;
-        end = start + 16;
+        end = start + BLOCKSIZE_IN_BYTES;
         decryptor(&cipher[start..end], &mut plain[start..end], keys);
     }
     cipher[start..end].to_owned()
@@ -114,6 +125,7 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode, padding_128bit};
+/// use aes_frast::N_SUBKEYS_256BIT;
 /// let length: usize = 64;
 /// let mut plain: Vec<u8> = vec![0x30, 0xA3, 0xBC, 0xA0, 0xBA, 0x57, 0xFB, 0x27,
 ///                               0x2F, 0xE2, 0x31, 0xEC, 0xBB, 0x04, 0x5E, 0x93,
@@ -129,7 +141,7 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 ///                               0x66, 0x72, 0xA8, 0x17, 0x95, 0x1F, 0xF6, 0x06,
 ///                               0x24, 0x40, 0xDE, 0xF5, 0x08, 0xF1, 0x64, 0x34,
 ///                               0xD6, 0xEF, 0xEF, 0xFD, 0x26, 0x23, 0x04, 0x95];
-/// let mut w_keys: Vec<u32> = vec![0u32; 60];
+/// let mut w_keys: Vec<u32> = vec![0u32; N_SUBKEYS_256BIT];
 /// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
@@ -161,29 +173,28 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// }
 /// ```
 pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer: [u8; 16] = [0; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
-    for j in 0..16 {
+    for j in 0..BLOCKSIZE_IN_BYTES {
         buffer[j] = iv[j] ^ plain[j];
     }
-    encryptor(&buffer, &mut cipher[0..16], keys);
+    encryptor(&buffer, &mut cipher[..BLOCKSIZE_IN_BYTES], keys);
     // The other blocks
     let block_number = plain.len() >> 4;
     let mut start = 0;
     for i in 1..block_number {
         start = i << 4;
-        for j in 0..16 {
-            buffer[j] = cipher[start + j - 16] ^ plain[start + j];
+        for j in 0..BLOCKSIZE_IN_BYTES {
+            buffer[j] = cipher[start + j - BLOCKSIZE_IN_BYTES] ^ plain[start + j];
         }
-        encryptor(&buffer, &mut cipher[start..(start + 16)], keys);
+        encryptor(
+            &buffer,
+            &mut cipher[start..(start + BLOCKSIZE_IN_BYTES)],
+            keys,
+        );
     }
-    cipher[start..(start + 16)].to_owned()
+    cipher[start..(start + BLOCKSIZE_IN_BYTES)].to_owned()
 }
 /// CBC (Cipher Block Chaining) Decryption
 ///
@@ -198,16 +209,11 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 ///
 /// [`cbc_enc`]: ../aes_with_operation_mode/fn.cbc_enc.html
 pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let decryptor = match keys.len() {
-        44 => aes_core::block_decrypt128,
-        52 => aes_core::block_decrypt192,
-        60 => aes_core::block_decrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer: [u8; 16] = [0; 16];
+    let decryptor = select_decrypt_function!(keys);
+    let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
-    decryptor(&cipher[0..16], &mut buffer, keys);
-    for j in 0..16 {
+    decryptor(&cipher[..BLOCKSIZE_IN_BYTES], &mut buffer, keys);
+    for j in 0..BLOCKSIZE_IN_BYTES {
         plain[j] = iv[j] ^ buffer[j];
     }
     // The other blocks
@@ -215,12 +221,16 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     let mut start = 0;
     for i in 1..block_number {
         start = i << 4;
-        decryptor(&cipher[start..(start + 16)], &mut buffer, keys);
-        for j in 0..16 {
-            plain[start + j] = cipher[start + j - 16] ^ buffer[j];
+        decryptor(
+            &cipher[start..(start + BLOCKSIZE_IN_BYTES)],
+            &mut buffer,
+            keys,
+        );
+        for j in 0..BLOCKSIZE_IN_BYTES {
+            plain[start + j] = cipher[start + j - BLOCKSIZE_IN_BYTES] ^ buffer[j];
         }
     }
-    cipher[start..(start + 16)].to_owned()
+    cipher[start..(start + BLOCKSIZE_IN_BYTES)].to_owned()
 }
 /// CFB (Cipher Feedback) Encryption
 ///
@@ -236,6 +246,7 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode  /* , padding_128bit */  };
+/// use aes_frast::N_SUBKEYS_256BIT;
 /// let length: usize = 64;
 /// let plain: Vec<u8> = vec![0x34, 0x63, 0xD0, 0x89, 0x1D, 0x71, 0x4A, 0xB0,
 ///                           0x08, 0x5D, 0x22, 0xE1, 0x8B, 0xFA, 0x77, 0xF0,
@@ -251,7 +262,7 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 ///                               0x66, 0x72, 0xA8, 0x17, 0x95, 0x1F, 0xF6, 0x06,
 ///                               0x24, 0x40, 0xDE, 0xF5, 0x08, 0xF1, 0x64, 0x34,
 ///                               0xD6, 0xEF, 0xEF, 0xFD, 0x26, 0x23, 0x04, 0x95];
-/// let mut w_keys: Vec<u32> = vec![0u32; 60];
+/// let mut w_keys: Vec<u32> = vec![0u32; N_SUBKEYS_256BIT];
 /// let     iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
@@ -281,28 +292,27 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// }
 /// ```
 pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer: [u8; 16] = [0; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // If input has only one block, consider it as the last block, not the 1st.
     // If input has only two blocks, consider it has no middle blocks.
     // The 1st (head) block
     encryptor(iv, &mut buffer, keys);
     let block_number = plain.len() >> 4;
     let mut start = 0;
-    if plain.len() >= 16 {
-        for j in 0..16 {
+    if plain.len() >= BLOCKSIZE_IN_BYTES {
+        for j in 0..BLOCKSIZE_IN_BYTES {
             cipher[j] = buffer[j] ^ plain[j];
         }
         // The middle blocks
         for i in 1..block_number {
             start = i << 4;
-            encryptor(&cipher[(start - 16)..start], &mut buffer, keys);
-            for j in 0..16 {
+            encryptor(
+                &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
+                &mut buffer,
+                keys,
+            );
+            for j in 0..BLOCKSIZE_IN_BYTES {
                 cipher[start + j] = buffer[j] ^ plain[start + j];
             }
         }
@@ -312,14 +322,18 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         r if r != 0 => {
             if block_number != 0 {
                 start = block_number << 4;
-                encryptor(&cipher[(start - 16)..start], &mut buffer, keys);
+                encryptor(
+                    &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
+                    &mut buffer,
+                    keys,
+                );
             }
             for j in 0..r {
                 cipher[start + j] = buffer[j] ^ plain[start + j];
             }
             cipher[start..(start + r)].to_owned()
         }
-        _ => cipher[start..(start + 16)].to_owned(),
+        _ => cipher[start..(start + BLOCKSIZE_IN_BYTES)].to_owned(),
     }
 }
 /// CFB (Cipher Feedback) Decryption
@@ -339,28 +353,27 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// [`cfb_enc`]: ../aes_with_operation_mode/fn.cfb_enc.html
 pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     // You may think this function is the same as the `cfb_enc` function, but in fact they differ
-    // in the last line. Both functions return `&cipher[start..(start + 16)]`, which is the first
+    // in the last line. Both functions return `&cipher[start..(start + BLOCKSIZE_IN_BYTES)]`, which is the first
     // parameter in this function, while it's the second parameter in the `cfb_enc` function.
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer: [u8; 16] = [0; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     encryptor(iv, &mut buffer, keys);
     let block_number = plain.len() >> 4;
     let mut start = 0;
-    if cipher.len() >= 16 {
-        for j in 0..16 {
+    if cipher.len() >= BLOCKSIZE_IN_BYTES {
+        for j in 0..BLOCKSIZE_IN_BYTES {
             plain[j] = buffer[j] ^ cipher[j]
         }
         // The middle blocks
         for i in 1usize..block_number {
             start = i << 4;
-            encryptor(&cipher[(start - 16)..start], &mut buffer, keys);
-            for j in 0..16 {
+            encryptor(
+                &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
+                &mut buffer,
+                keys,
+            );
+            for j in 0..BLOCKSIZE_IN_BYTES {
                 plain[start + j] = buffer[j] ^ cipher[start + j];
             }
         }
@@ -370,14 +383,18 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         r if r != 0 => {
             if block_number != 0 {
                 start = block_number << 4;
-                encryptor(&cipher[(start - 16)..start], &mut buffer, keys);
+                encryptor(
+                    &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
+                    &mut buffer,
+                    keys,
+                );
             }
             for j in 0..r {
                 plain[start + j] = buffer[j] ^ cipher[start + j];
             }
             cipher[start..(start + r)].to_owned()
         }
-        _ => cipher[start..(start + 16)].to_owned(),
+        _ => cipher[start..(start + BLOCKSIZE_IN_BYTES)].to_owned(),
     }
 }
 /// OFB (Output Feedback) Encryption and Decryption
@@ -398,6 +415,7 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode, padding_128bit};
+/// use aes_frast::N_SUBKEYS_256BIT;
 /// let length: usize = 64;
 /// let mut plain: Vec<u8> = vec![0x34, 0x63, 0xD0, 0x89, 0x1D, 0x71, 0x4A, 0xB0,
 ///                               0x08, 0x5D, 0x22, 0xE1, 0x8B, 0xFA, 0x77, 0xF0,
@@ -413,7 +431,7 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 ///                               0x66, 0x72, 0xA8, 0x17, 0x95, 0x1F, 0xF6, 0x06,
 ///                               0x24, 0x40, 0xDE, 0xF5, 0x08, 0xF1, 0x64, 0x34,
 ///                               0xD6, 0xEF, 0xEF, 0xFD, 0x26, 0x23, 0x04, 0x95];
-/// let mut w_keys: Vec<u32> = vec![0u32; 60];
+/// let mut w_keys: Vec<u32> = vec![0u32; N_SUBKEYS_256BIT];
 /// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
@@ -448,20 +466,15 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// [`key_schedule_decrypt192`]: ../aes_core/fn.key_schedule_decrypt192.html
 /// [`key_schedule_decrypt256`]: ../aes_core/fn.key_schedule_decrypt256.html
 pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer_new = vec![0u8; 16];
-    let mut buffer_last = vec![0u8; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut buffer_new = vec![0; BLOCKSIZE_IN_BYTES];
+    let mut buffer_last = vec![0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     encryptor(iv, &mut buffer_new, keys);
     let block_number = input.len() >> 4;
     let mut start;
-    if input.len() >= 16 {
-        for j in 0..16 {
+    if input.len() >= BLOCKSIZE_IN_BYTES {
+        for j in 0..BLOCKSIZE_IN_BYTES {
             output[j] = buffer_new[j] ^ input[j]
         }
         // The middle blocks
@@ -469,7 +482,7 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
             start = i << 4;
             mem::swap(&mut buffer_new, &mut buffer_last);
             encryptor(&buffer_last, &mut buffer_new, keys);
-            for j in 0..16 {
+            for j in 0..BLOCKSIZE_IN_BYTES {
                 output[start + j] = buffer_new[j] ^ input[start + j];
             }
         }
@@ -503,6 +516,7 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode, padding_128bit};
+/// use aes_frast::N_SUBKEYS_256BIT;
 /// let length: usize = 64;
 /// let mut plain: Vec<u8> = vec![0x30, 0xA3, 0xBC, 0xA0, 0xBA, 0x57, 0xFB, 0x27,
 ///                               0x2F, 0xE2, 0x31, 0xEC, 0xBB, 0x04, 0x5E, 0x93,
@@ -518,7 +532,7 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 ///                               0x66, 0x72, 0xA8, 0x17, 0x95, 0x1F, 0xF6, 0x06,
 ///                               0x24, 0x40, 0xDE, 0xF5, 0x08, 0xF1, 0x64, 0x34,
 ///                               0xD6, 0xEF, 0xEF, 0xFD, 0x26, 0x23, 0x04, 0x95];
-/// let mut w_keys: Vec<u32> = vec![0u32; 60];
+/// let mut w_keys: Vec<u32> = vec![0u32; N_SUBKEYS_256BIT];
 /// let mut iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                            0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 ///
@@ -535,29 +549,30 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// }
 /// ```
 pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer = vec![0u8; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut buffer = vec![0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
-    for j in 0..16 {
+    for j in 0..BLOCKSIZE_IN_BYTES {
         buffer[j] = iv[j] ^ plain[j];
     }
-    encryptor(&buffer, &mut cipher[0..16], keys);
+    encryptor(&buffer, &mut cipher[..BLOCKSIZE_IN_BYTES], keys);
     // The other blocks
     let block_number = plain.len() >> 4;
     let mut start = 0;
     for i in 1..block_number {
         start = i << 4;
-        for j in 0..16 {
-            buffer[j] = cipher[start + j - 16] ^ plain[start + j - 16] ^ plain[start + j];
+        for j in 0..BLOCKSIZE_IN_BYTES {
+            buffer[j] = cipher[start + j - BLOCKSIZE_IN_BYTES]
+                ^ plain[start + j - BLOCKSIZE_IN_BYTES]
+                ^ plain[start + j];
         }
-        encryptor(&buffer, &mut cipher[start..(start + 16)], keys);
+        encryptor(
+            &buffer,
+            &mut cipher[start..(start + BLOCKSIZE_IN_BYTES)],
+            keys,
+        );
     }
-    for j in 0..16 {
+    for j in 0..BLOCKSIZE_IN_BYTES {
         buffer[j] = cipher[start + j] ^ plain[start + j];
     }
     buffer
@@ -577,16 +592,11 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 ///
 /// [`pcbc_enc`]: ../aes_with_operation_mode/fn.pcbc_enc.html
 pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let decryptor = match keys.len() {
-        44 => aes_core::block_decrypt128,
-        52 => aes_core::block_decrypt192,
-        60 => aes_core::block_decrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut buffer = vec![0u8; 16];
+    let decryptor = select_decrypt_function!(keys);
+    let mut buffer = vec![0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
-    decryptor(&cipher[0..16], &mut buffer, keys);
-    for j in 0..16 {
+    decryptor(&cipher[..BLOCKSIZE_IN_BYTES], &mut buffer, keys);
+    for j in 0..BLOCKSIZE_IN_BYTES {
         plain[j] = iv[j] ^ buffer[j];
     }
     // The other block
@@ -594,12 +604,18 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
     let mut start = 0;
     for i in 1usize..block_number {
         start = i << 4;
-        decryptor(&cipher[start..(start + 16)], &mut buffer, keys);
-        for j in 0..16 {
-            plain[start + j] = cipher[start + j - 16] ^ plain[start + j - 16] ^ buffer[j];
+        decryptor(
+            &cipher[start..(start + BLOCKSIZE_IN_BYTES)],
+            &mut buffer,
+            keys,
+        );
+        for j in 0..BLOCKSIZE_IN_BYTES {
+            plain[start + j] = cipher[start + j - BLOCKSIZE_IN_BYTES]
+                ^ plain[start + j - BLOCKSIZE_IN_BYTES]
+                ^ buffer[j];
         }
     }
-    for j in 0..16 {
+    for j in 0..BLOCKSIZE_IN_BYTES {
         buffer[j] = cipher[start + j] ^ plain[start + j];
     }
     buffer
@@ -608,6 +624,7 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode};
+/// use aes_frast::N_SUBKEYS_256BIT;
 /// let length: usize = 64;
 /// let plain: Vec<u8> = vec![0x34, 0x63, 0xD0, 0x89, 0x1D, 0x71, 0x4A, 0xB0,
 ///                           0x08, 0x5D, 0x22, 0xE1, 0x8B, 0xFA, 0x77, 0xF0,
@@ -623,7 +640,7 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 ///                           0x66, 0x72, 0xA8, 0x17, 0x95, 0x1F, 0xF6, 0x06,
 ///                           0x24, 0x40, 0xDE, 0xF5, 0x08, 0xF1, 0x64, 0x34,
 ///                           0xD6, 0xEF, 0xEF, 0xFD, 0x26, 0x23, 0x04, 0x95];
-/// let mut w_keys: Vec<u32> = vec![0u32; 60];
+/// let mut w_keys: Vec<u32> = vec![0u32; N_SUBKEYS_256BIT];
 /// let iv: Vec<u8> = vec![0x04, 0x7C, 0xF3, 0xEA, 0xE1, 0x76, 0x45, 0x85,
 ///                        0x72, 0x52, 0x7B, 0xAA, 0x26, 0x0D, 0x65, 0xBB];
 /// let expected_encrypted = vec![0x9D, 0x54, 0x96, 0xA3, 0x89, 0x1E, 0xC0, 0x40,
@@ -653,13 +670,8 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// }
 /// ```
 pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut out_buffer = vec![0u8; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut out_buffer = vec![0; BLOCKSIZE_IN_BYTES];
     let mut in_buffer = iv.to_owned();
     for i in 0..plain.len() {
         encryptor(&in_buffer, &mut out_buffer, keys);
@@ -675,13 +687,8 @@ pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Ve
 ///
 /// [`cfb_8_enc`]: ../aes_with_operation_mode/fn.cfb_8_enc.html
 pub fn cfb_8_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
-    let encryptor = match keys.len() {
-        44 => aes_core::block_encrypt128,
-        52 => aes_core::block_encrypt192,
-        60 => aes_core::block_encrypt256,
-        _ => panic!("Invalid key length."),
-    };
-    let mut out_buffer = vec![0u8; 16];
+    let encryptor = select_encrypt_function!(keys);
+    let mut out_buffer = vec![0; BLOCKSIZE_IN_BYTES];
     let mut in_buffer = iv.to_owned();
     for i in 0..cipher.len() {
         encryptor(&in_buffer, &mut out_buffer, keys);

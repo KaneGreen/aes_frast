@@ -26,12 +26,23 @@
 
 include!(concat!(env!("OUT_DIR"), "/tables.rs"));
 
-/// Sub-keys size from 128bit key, which is 44.
+/// AES block size in bytes, which is 16.
+pub const BLOCKSIZE_IN_BYTES: usize = 16;
+/// 128bit key size in bytes, which is 16.
+pub const KEY_BYTES_128BIT: usize = 16;
+/// 192bit key size in bytes, which is 24.
+pub const KEY_BYTES_192BIT: usize = 24;
+/// 256bit key size in bytes, which is 32.
+pub const KEY_BYTES_256BIT: usize = 32;
+/// Sub-keys size in words (u32) from 128bit key, which is 44.
 pub const N_SUBKEYS_128BIT: usize = 44;
-/// Sub-keys size from 192bit key, which is 52.
+/// Sub-keys size in words (u32) from 192bit key, which is 52.
 pub const N_SUBKEYS_192BIT: usize = 52;
-/// Sub-keys size from 256bit key, which is 60.
+/// Sub-keys size in words (u32) from 256bit key, which is 60.
 pub const N_SUBKEYS_256BIT: usize = 60;
+
+// Operator precedence in Rust:
+// https://doc.rust-lang.org/reference/expressions.html#expression-precedence
 
 // Put four u8 numbers in little-endian order to get an u32 number.
 // The first u8 will become the least significant bits (LSB), and the last one
@@ -44,47 +55,47 @@ pub const N_SUBKEYS_256BIT: usize = 60;
 // ```
 macro_rules! four_u8_to_u32 {
     ($b0:expr, $b1:expr, $b2:expr, $b3:expr) => {
-        (((($b3) as u32) << 24) | ((($b2) as u32) << 16) | ((($b1) as u32) << 8) | (($b0) as u32))
+        ($b3 as u32) << 24 | ($b2 as u32) << 16 | ($b1 as u32) << 8 | $b0 as u32
     };
 }
 macro_rules! u8_b3_of_u32 {
     ($w:expr) => {
-        ((($w) >> 24) as u8)
+        ($w >> 24) as u8
     };
 }
 macro_rules! u8_b2_of_u32 {
     ($w:expr) => {
-        ((($w) >> 16) as u8)
+        ($w >> 16) as u8
     };
 }
 macro_rules! u8_b1_of_u32 {
     ($w:expr) => {
-        ((($w) >> 8) as u8)
+        ($w >> 8) as u8
     };
 }
 macro_rules! u8_b0_of_u32 {
     ($w:expr) => {
-        (($w) as u8)
+        $w as u8
     };
 }
 macro_rules! usize_b3_of_u32 {
     ($w:expr) => {
-        ((($w) >> 24) as usize)
+        ($w >> 24) as usize
     };
 }
 macro_rules! usize_b2_of_u32 {
     ($w:expr) => {
-        (u8_b2_of_u32!($w) as usize)
+        u8_b2_of_u32!($w) as usize
     };
 }
 macro_rules! usize_b1_of_u32 {
     ($w:expr) => {
-        (u8_b1_of_u32!($w) as usize)
+        u8_b1_of_u32!($w) as usize
     };
 }
 macro_rules! usize_b0_of_u32 {
     ($w:expr) => {
-        (u8_b0_of_u32!($w) as usize)
+        u8_b0_of_u32!($w) as usize
     };
 }
 
@@ -92,12 +103,12 @@ macro_rules! usize_b0_of_u32 {
 /// aka `SubWord(RotWord(temp)) xor Rcon[i/Nk]` in NIST.FIPS.197
 macro_rules! round_g_function {
     ($word:expr, $round:expr) => {
-        (four_u8_to_u32!(
+        four_u8_to_u32!(
             SBOX[usize_b1_of_u32!($word)] ^ RC[$round],
             SBOX[usize_b2_of_u32!($word)],
             SBOX[usize_b3_of_u32!($word)],
             SBOX[usize_b0_of_u32!($word)]
-        ))
+        )
     };
 }
 
@@ -105,21 +116,21 @@ macro_rules! round_g_function {
 /// aka `SubWord(temp)` in NIST.FIPS.197
 macro_rules! round_h_function {
     ($word:expr) => {
-        (four_u8_to_u32!(
+        four_u8_to_u32!(
             SBOX[usize_b0_of_u32!($word)],
             SBOX[usize_b1_of_u32!($word)],
             SBOX[usize_b2_of_u32!($word)],
             SBOX[usize_b3_of_u32!($word)]
-        ))
+        )
     };
 }
 
 /// 128bit key schedule
 macro_rules! key_schedule_128_function {
-    ($origin:ident, $keys:ident) => {{
-        ::std::assert_eq!($keys.len(), N_SUBKEYS_128BIT);
+    ($origin:ident, $subkeys:ident) => {{
+        ::std::assert_eq!($subkeys.len(), N_SUBKEYS_128BIT);
         for i in 0..4 {
-            $keys[i] = four_u8_to_u32!(
+            $subkeys[i] = four_u8_to_u32!(
                 $origin[4 * i],
                 $origin[4 * i + 1],
                 $origin[4 * i + 2],
@@ -127,20 +138,20 @@ macro_rules! key_schedule_128_function {
             );
         }
         for i in 0..10 {
-            $keys[4 * i + 4] = $keys[4 * i] ^ round_g_function!($keys[4 * i + 3], i);
-            $keys[4 * i + 5] = $keys[4 * i + 1] ^ $keys[4 * i + 4];
-            $keys[4 * i + 6] = $keys[4 * i + 2] ^ $keys[4 * i + 5];
-            $keys[4 * i + 7] = $keys[4 * i + 3] ^ $keys[4 * i + 6];
+            $subkeys[4 * i + 4] = $subkeys[4 * i] ^ round_g_function!($subkeys[4 * i + 3], i);
+            $subkeys[4 * i + 5] = $subkeys[4 * i + 1] ^ $subkeys[4 * i + 4];
+            $subkeys[4 * i + 6] = $subkeys[4 * i + 2] ^ $subkeys[4 * i + 5];
+            $subkeys[4 * i + 7] = $subkeys[4 * i + 3] ^ $subkeys[4 * i + 6];
         }
     }};
 }
 
 /// 192bit key schedule
 macro_rules! key_schedule_192_function {
-    ($origin:ident, $keys:ident) => {{
-        ::std::assert_eq!($keys.len(), N_SUBKEYS_192BIT);
+    ($origin:ident, $subkeys:ident) => {{
+        ::std::assert_eq!($subkeys.len(), N_SUBKEYS_192BIT);
         for i in 0..6 {
-            $keys[i] = four_u8_to_u32!(
+            $subkeys[i] = four_u8_to_u32!(
                 $origin[4 * i],
                 $origin[4 * i + 1],
                 $origin[4 * i + 2],
@@ -148,26 +159,26 @@ macro_rules! key_schedule_192_function {
             );
         }
         for i in 0..7 {
-            $keys[6 * i + 6] = $keys[6 * i] ^ round_g_function!($keys[6 * i + 5], i);
-            $keys[6 * i + 7] = $keys[6 * i + 1] ^ $keys[6 * i + 6];
-            $keys[6 * i + 8] = $keys[6 * i + 2] ^ $keys[6 * i + 7];
-            $keys[6 * i + 9] = $keys[6 * i + 3] ^ $keys[6 * i + 8];
-            $keys[6 * i + 10] = $keys[6 * i + 4] ^ $keys[6 * i + 9];
-            $keys[6 * i + 11] = $keys[6 * i + 5] ^ $keys[6 * i + 10];
+            $subkeys[6 * i + 6] = $subkeys[6 * i] ^ round_g_function!($subkeys[6 * i + 5], i);
+            $subkeys[6 * i + 7] = $subkeys[6 * i + 1] ^ $subkeys[6 * i + 6];
+            $subkeys[6 * i + 8] = $subkeys[6 * i + 2] ^ $subkeys[6 * i + 7];
+            $subkeys[6 * i + 9] = $subkeys[6 * i + 3] ^ $subkeys[6 * i + 8];
+            $subkeys[6 * i + 10] = $subkeys[6 * i + 4] ^ $subkeys[6 * i + 9];
+            $subkeys[6 * i + 11] = $subkeys[6 * i + 5] ^ $subkeys[6 * i + 10];
         }
-        $keys[48] = $keys[42] ^ round_g_function!($keys[47], 7);
-        $keys[49] = $keys[43] ^ $keys[48];
-        $keys[50] = $keys[44] ^ $keys[49];
-        $keys[51] = $keys[45] ^ $keys[50];
+        $subkeys[48] = $subkeys[42] ^ round_g_function!($subkeys[47], 7);
+        $subkeys[49] = $subkeys[43] ^ $subkeys[48];
+        $subkeys[50] = $subkeys[44] ^ $subkeys[49];
+        $subkeys[51] = $subkeys[45] ^ $subkeys[50];
     }};
 }
 
 /// 256bit key schedule
 macro_rules! key_schedule_256_function {
-    ($origin:ident, $keys:ident) => {{
-        ::std::assert_eq!($keys.len(), N_SUBKEYS_256BIT);
+    ($origin:ident, $subkeys:ident) => {{
+        ::std::assert_eq!($subkeys.len(), N_SUBKEYS_256BIT);
         for i in 0..8 {
-            $keys[i] = four_u8_to_u32!(
+            $subkeys[i] = four_u8_to_u32!(
                 $origin[4 * i],
                 $origin[4 * i + 1],
                 $origin[4 * i + 2],
@@ -175,67 +186,67 @@ macro_rules! key_schedule_256_function {
             );
         }
         for i in 0..6 {
-            $keys[8 * i + 8] = $keys[8 * i] ^ round_g_function!($keys[8 * i + 7], i);
-            $keys[8 * i + 9] = $keys[8 * i + 1] ^ $keys[8 * i + 8];
-            $keys[8 * i + 10] = $keys[8 * i + 2] ^ $keys[8 * i + 9];
-            $keys[8 * i + 11] = $keys[8 * i + 3] ^ $keys[8 * i + 10];
-            $keys[8 * i + 12] = $keys[8 * i + 4] ^ round_h_function!($keys[8 * i + 11]);
-            $keys[8 * i + 13] = $keys[8 * i + 5] ^ $keys[8 * i + 12];
-            $keys[8 * i + 14] = $keys[8 * i + 6] ^ $keys[8 * i + 13];
-            $keys[8 * i + 15] = $keys[8 * i + 7] ^ $keys[8 * i + 14];
+            $subkeys[8 * i + 8] = $subkeys[8 * i] ^ round_g_function!($subkeys[8 * i + 7], i);
+            $subkeys[8 * i + 9] = $subkeys[8 * i + 1] ^ $subkeys[8 * i + 8];
+            $subkeys[8 * i + 10] = $subkeys[8 * i + 2] ^ $subkeys[8 * i + 9];
+            $subkeys[8 * i + 11] = $subkeys[8 * i + 3] ^ $subkeys[8 * i + 10];
+            $subkeys[8 * i + 12] = $subkeys[8 * i + 4] ^ round_h_function!($subkeys[8 * i + 11]);
+            $subkeys[8 * i + 13] = $subkeys[8 * i + 5] ^ $subkeys[8 * i + 12];
+            $subkeys[8 * i + 14] = $subkeys[8 * i + 6] ^ $subkeys[8 * i + 13];
+            $subkeys[8 * i + 15] = $subkeys[8 * i + 7] ^ $subkeys[8 * i + 14];
         }
-        $keys[56] = $keys[48] ^ round_g_function!($keys[55], 6);
-        $keys[57] = $keys[49] ^ $keys[56];
-        $keys[58] = $keys[50] ^ $keys[57];
-        $keys[59] = $keys[51] ^ $keys[58];
+        $subkeys[56] = $subkeys[48] ^ round_g_function!($subkeys[55], 6);
+        $subkeys[57] = $subkeys[49] ^ $subkeys[56];
+        $subkeys[58] = $subkeys[50] ^ $subkeys[57];
+        $subkeys[59] = $subkeys[51] ^ $subkeys[58];
     }};
 }
 
 /// The keys for decryption need extra transform -- the inverse MixColumn.
 macro_rules! dkey_mixcolumn {
-    ($keys:ident, $length:expr) => {{
+    ($subkeys:ident, $length:expr) => {{
         // The first and the last round don't need the inverse MixColumn transform
         for i in 4..(($length) - 4) {
-            $keys[i] = TD0[SBOX[usize_b0_of_u32!($keys[i])] as usize]
-                ^ TD1[SBOX[usize_b1_of_u32!($keys[i])] as usize]
-                ^ TD2[SBOX[usize_b2_of_u32!($keys[i])] as usize]
-                ^ TD3[SBOX[usize_b3_of_u32!($keys[i])] as usize];
+            $subkeys[i] = TD0[SBOX[usize_b0_of_u32!($subkeys[i])] as usize]
+                ^ TD1[SBOX[usize_b1_of_u32!($subkeys[i])] as usize]
+                ^ TD2[SBOX[usize_b2_of_u32!($subkeys[i])] as usize]
+                ^ TD3[SBOX[usize_b3_of_u32!($subkeys[i])] as usize];
         }
     }};
 }
 
 /// Encrypt a block.
 macro_rules! encryption_function {
-    ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {
+    ($input:ident, $output:ident, $subkeys:ident, $inner_rounds:expr, $subkeys_length:expr) => {
         // These `assert` improved performance.
         ::std::assert_eq!($output.len(), 128 / 8);
         ::std::assert_eq!($input.len(), 128 / 8);
-        ::std::assert_eq!($keys.len(), $keys_length);
-        let mut wa0 = four_u8_to_u32!($input[0], $input[1], $input[2], $input[3]) ^ $keys[0];
-        let mut wa1 = four_u8_to_u32!($input[4], $input[5], $input[6], $input[7]) ^ $keys[1];
-        let mut wa2 = four_u8_to_u32!($input[8], $input[9], $input[10], $input[11]) ^ $keys[2];
-        let mut wa3 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15]) ^ $keys[3];
+        ::std::assert_eq!($subkeys.len(), $subkeys_length);
+        let mut wa0 = four_u8_to_u32!($input[0], $input[1], $input[2], $input[3]) ^ $subkeys[0];
+        let mut wa1 = four_u8_to_u32!($input[4], $input[5], $input[6], $input[7]) ^ $subkeys[1];
+        let mut wa2 = four_u8_to_u32!($input[8], $input[9], $input[10], $input[11]) ^ $subkeys[2];
+        let mut wa3 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15]) ^ $subkeys[3];
         // round 1
         let mut wb0 = TE0[usize_b0_of_u32!(wa0)]
             ^ TE1[usize_b1_of_u32!(wa1)]
             ^ TE2[usize_b2_of_u32!(wa2)]
             ^ TE3[usize_b3_of_u32!(wa3)]
-            ^ $keys[4];
+            ^ $subkeys[4];
         let mut wb1 = TE0[usize_b0_of_u32!(wa1)]
             ^ TE1[usize_b1_of_u32!(wa2)]
             ^ TE2[usize_b2_of_u32!(wa3)]
             ^ TE3[usize_b3_of_u32!(wa0)]
-            ^ $keys[5];
+            ^ $subkeys[5];
         let mut wb2 = TE0[usize_b0_of_u32!(wa2)]
             ^ TE1[usize_b1_of_u32!(wa3)]
             ^ TE2[usize_b2_of_u32!(wa0)]
             ^ TE3[usize_b3_of_u32!(wa1)]
-            ^ $keys[6];
+            ^ $subkeys[6];
         let mut wb3 = TE0[usize_b0_of_u32!(wa3)]
             ^ TE1[usize_b1_of_u32!(wa0)]
             ^ TE2[usize_b2_of_u32!(wa1)]
             ^ TE3[usize_b3_of_u32!(wa2)]
-            ^ $keys[7];
+            ^ $subkeys[7];
         // round 2 to round 9 (or 11, 13)
         for i in 1..($inner_rounds) {
             // even-number rounds
@@ -243,101 +254,101 @@ macro_rules! encryption_function {
                 ^ TE1[usize_b1_of_u32!(wb1)]
                 ^ TE2[usize_b2_of_u32!(wb2)]
                 ^ TE3[usize_b3_of_u32!(wb3)]
-                ^ $keys[8 * i];
+                ^ $subkeys[8 * i];
             wa1 = TE0[usize_b0_of_u32!(wb1)]
                 ^ TE1[usize_b1_of_u32!(wb2)]
                 ^ TE2[usize_b2_of_u32!(wb3)]
                 ^ TE3[usize_b3_of_u32!(wb0)]
-                ^ $keys[8 * i + 1];
+                ^ $subkeys[8 * i + 1];
             wa2 = TE0[usize_b0_of_u32!(wb2)]
                 ^ TE1[usize_b1_of_u32!(wb3)]
                 ^ TE2[usize_b2_of_u32!(wb0)]
                 ^ TE3[usize_b3_of_u32!(wb1)]
-                ^ $keys[8 * i + 2];
+                ^ $subkeys[8 * i + 2];
             wa3 = TE0[usize_b0_of_u32!(wb3)]
                 ^ TE1[usize_b1_of_u32!(wb0)]
                 ^ TE2[usize_b2_of_u32!(wb1)]
                 ^ TE3[usize_b3_of_u32!(wb2)]
-                ^ $keys[8 * i + 3];
+                ^ $subkeys[8 * i + 3];
             // odd-number rounds
             wb0 = TE0[usize_b0_of_u32!(wa0)]
                 ^ TE1[usize_b1_of_u32!(wa1)]
                 ^ TE2[usize_b2_of_u32!(wa2)]
                 ^ TE3[usize_b3_of_u32!(wa3)]
-                ^ $keys[8 * i + 4];
+                ^ $subkeys[8 * i + 4];
             wb1 = TE0[usize_b0_of_u32!(wa1)]
                 ^ TE1[usize_b1_of_u32!(wa2)]
                 ^ TE2[usize_b2_of_u32!(wa3)]
                 ^ TE3[usize_b3_of_u32!(wa0)]
-                ^ $keys[8 * i + 5];
+                ^ $subkeys[8 * i + 5];
             wb2 = TE0[usize_b0_of_u32!(wa2)]
                 ^ TE1[usize_b1_of_u32!(wa3)]
                 ^ TE2[usize_b2_of_u32!(wa0)]
                 ^ TE3[usize_b3_of_u32!(wa1)]
-                ^ $keys[8 * i + 6];
+                ^ $subkeys[8 * i + 6];
             wb3 = TE0[usize_b0_of_u32!(wa3)]
                 ^ TE1[usize_b1_of_u32!(wa0)]
                 ^ TE2[usize_b2_of_u32!(wa1)]
                 ^ TE3[usize_b3_of_u32!(wa2)]
-                ^ $keys[8 * i + 7];
+                ^ $subkeys[8 * i + 7];
         }
         // final round - no MixColumn
         // accessing array elements by index in reverse order is faster than in normal order
-        $output[15] = SBOX[usize_b3_of_u32!(wb2)] ^ u8_b3_of_u32!($keys[$keys_length - 1]);
-        $output[14] = SBOX[usize_b2_of_u32!(wb1)] ^ u8_b2_of_u32!($keys[$keys_length - 1]);
-        $output[13] = SBOX[usize_b1_of_u32!(wb0)] ^ u8_b1_of_u32!($keys[$keys_length - 1]);
-        $output[12] = SBOX[usize_b0_of_u32!(wb3)] ^ u8_b0_of_u32!($keys[$keys_length - 1]);
-        $output[11] = SBOX[usize_b3_of_u32!(wb1)] ^ u8_b3_of_u32!($keys[$keys_length - 2]);
-        $output[10] = SBOX[usize_b2_of_u32!(wb0)] ^ u8_b2_of_u32!($keys[$keys_length - 2]);
-        $output[9] = SBOX[usize_b1_of_u32!(wb3)] ^ u8_b1_of_u32!($keys[$keys_length - 2]);
-        $output[8] = SBOX[usize_b0_of_u32!(wb2)] ^ u8_b0_of_u32!($keys[$keys_length - 2]);
-        $output[7] = SBOX[usize_b3_of_u32!(wb0)] ^ u8_b3_of_u32!($keys[$keys_length - 3]);
-        $output[6] = SBOX[usize_b2_of_u32!(wb3)] ^ u8_b2_of_u32!($keys[$keys_length - 3]);
-        $output[5] = SBOX[usize_b1_of_u32!(wb2)] ^ u8_b1_of_u32!($keys[$keys_length - 3]);
-        $output[4] = SBOX[usize_b0_of_u32!(wb1)] ^ u8_b0_of_u32!($keys[$keys_length - 3]);
-        $output[3] = SBOX[usize_b3_of_u32!(wb3)] ^ u8_b3_of_u32!($keys[$keys_length - 4]);
-        $output[2] = SBOX[usize_b2_of_u32!(wb2)] ^ u8_b2_of_u32!($keys[$keys_length - 4]);
-        $output[1] = SBOX[usize_b1_of_u32!(wb1)] ^ u8_b1_of_u32!($keys[$keys_length - 4]);
-        $output[0] = SBOX[usize_b0_of_u32!(wb0)] ^ u8_b0_of_u32!($keys[$keys_length - 4]);
+        $output[15] = SBOX[usize_b3_of_u32!(wb2)] ^ u8_b3_of_u32!($subkeys[$subkeys_length - 1]);
+        $output[14] = SBOX[usize_b2_of_u32!(wb1)] ^ u8_b2_of_u32!($subkeys[$subkeys_length - 1]);
+        $output[13] = SBOX[usize_b1_of_u32!(wb0)] ^ u8_b1_of_u32!($subkeys[$subkeys_length - 1]);
+        $output[12] = SBOX[usize_b0_of_u32!(wb3)] ^ u8_b0_of_u32!($subkeys[$subkeys_length - 1]);
+        $output[11] = SBOX[usize_b3_of_u32!(wb1)] ^ u8_b3_of_u32!($subkeys[$subkeys_length - 2]);
+        $output[10] = SBOX[usize_b2_of_u32!(wb0)] ^ u8_b2_of_u32!($subkeys[$subkeys_length - 2]);
+        $output[9] = SBOX[usize_b1_of_u32!(wb3)] ^ u8_b1_of_u32!($subkeys[$subkeys_length - 2]);
+        $output[8] = SBOX[usize_b0_of_u32!(wb2)] ^ u8_b0_of_u32!($subkeys[$subkeys_length - 2]);
+        $output[7] = SBOX[usize_b3_of_u32!(wb0)] ^ u8_b3_of_u32!($subkeys[$subkeys_length - 3]);
+        $output[6] = SBOX[usize_b2_of_u32!(wb3)] ^ u8_b2_of_u32!($subkeys[$subkeys_length - 3]);
+        $output[5] = SBOX[usize_b1_of_u32!(wb2)] ^ u8_b1_of_u32!($subkeys[$subkeys_length - 3]);
+        $output[4] = SBOX[usize_b0_of_u32!(wb1)] ^ u8_b0_of_u32!($subkeys[$subkeys_length - 3]);
+        $output[3] = SBOX[usize_b3_of_u32!(wb3)] ^ u8_b3_of_u32!($subkeys[$subkeys_length - 4]);
+        $output[2] = SBOX[usize_b2_of_u32!(wb2)] ^ u8_b2_of_u32!($subkeys[$subkeys_length - 4]);
+        $output[1] = SBOX[usize_b1_of_u32!(wb1)] ^ u8_b1_of_u32!($subkeys[$subkeys_length - 4]);
+        $output[0] = SBOX[usize_b0_of_u32!(wb0)] ^ u8_b0_of_u32!($subkeys[$subkeys_length - 4]);
     };
 }
 
 /// Decrypt a block.
 macro_rules! decryption_function {
-    ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {{
+    ($input:ident, $output:ident, $subkeys:ident, $inner_rounds:expr, $subkeys_length:expr) => {{
         // These `assert` improved performance.
         ::std::assert_eq!($output.len(), 128 / 8);
         ::std::assert_eq!($input.len(), 128 / 8);
-        ::std::assert_eq!($keys.len(), $keys_length);
-        let mut wa0 =
-            four_u8_to_u32!($input[0], $input[1], $input[2], $input[3]) ^ $keys[$keys_length - 4];
-        let mut wa1 =
-            four_u8_to_u32!($input[4], $input[5], $input[6], $input[7]) ^ $keys[$keys_length - 3];
-        let mut wa2 =
-            four_u8_to_u32!($input[8], $input[9], $input[10], $input[11]) ^ $keys[$keys_length - 2];
+        ::std::assert_eq!($subkeys.len(), $subkeys_length);
+        let mut wa0 = four_u8_to_u32!($input[0], $input[1], $input[2], $input[3])
+            ^ $subkeys[$subkeys_length - 4];
+        let mut wa1 = four_u8_to_u32!($input[4], $input[5], $input[6], $input[7])
+            ^ $subkeys[$subkeys_length - 3];
+        let mut wa2 = four_u8_to_u32!($input[8], $input[9], $input[10], $input[11])
+            ^ $subkeys[$subkeys_length - 2];
         let mut wa3 = four_u8_to_u32!($input[12], $input[13], $input[14], $input[15])
-            ^ $keys[$keys_length - 1];
+            ^ $subkeys[$subkeys_length - 1];
         // round 1
         let mut wb0 = TD0[usize_b0_of_u32!(wa0)]
             ^ TD1[usize_b1_of_u32!(wa3)]
             ^ TD2[usize_b2_of_u32!(wa2)]
             ^ TD3[usize_b3_of_u32!(wa1)]
-            ^ $keys[$keys_length - 8];
+            ^ $subkeys[$subkeys_length - 8];
         let mut wb1 = TD0[usize_b0_of_u32!(wa1)]
             ^ TD1[usize_b1_of_u32!(wa0)]
             ^ TD2[usize_b2_of_u32!(wa3)]
             ^ TD3[usize_b3_of_u32!(wa2)]
-            ^ $keys[$keys_length - 7];
+            ^ $subkeys[$subkeys_length - 7];
         let mut wb2 = TD0[usize_b0_of_u32!(wa2)]
             ^ TD1[usize_b1_of_u32!(wa1)]
             ^ TD2[usize_b2_of_u32!(wa0)]
             ^ TD3[usize_b3_of_u32!(wa3)]
-            ^ $keys[$keys_length - 6];
+            ^ $subkeys[$subkeys_length - 6];
         let mut wb3 = TD0[usize_b0_of_u32!(wa3)]
             ^ TD1[usize_b1_of_u32!(wa2)]
             ^ TD2[usize_b2_of_u32!(wa1)]
             ^ TD3[usize_b3_of_u32!(wa0)]
-            ^ $keys[$keys_length - 5];
+            ^ $subkeys[$subkeys_length - 5];
         // round 2 to round 9 (or 11, 13)
         for i in 1..($inner_rounds) {
             // even-number rounds
@@ -345,62 +356,62 @@ macro_rules! decryption_function {
                 ^ TD1[usize_b1_of_u32!(wb3)]
                 ^ TD2[usize_b2_of_u32!(wb2)]
                 ^ TD3[usize_b3_of_u32!(wb1)]
-                ^ $keys[$keys_length - 4 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 4 - (8 * i)];
             wa1 = TD0[usize_b0_of_u32!(wb1)]
                 ^ TD1[usize_b1_of_u32!(wb0)]
                 ^ TD2[usize_b2_of_u32!(wb3)]
                 ^ TD3[usize_b3_of_u32!(wb2)]
-                ^ $keys[$keys_length - 3 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 3 - (8 * i)];
             wa2 = TD0[usize_b0_of_u32!(wb2)]
                 ^ TD1[usize_b1_of_u32!(wb1)]
                 ^ TD2[usize_b2_of_u32!(wb0)]
                 ^ TD3[usize_b3_of_u32!(wb3)]
-                ^ $keys[$keys_length - 2 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 2 - (8 * i)];
             wa3 = TD0[usize_b0_of_u32!(wb3)]
                 ^ TD1[usize_b1_of_u32!(wb2)]
                 ^ TD2[usize_b2_of_u32!(wb1)]
                 ^ TD3[usize_b3_of_u32!(wb0)]
-                ^ $keys[$keys_length - 1 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 1 - (8 * i)];
             // odd-number rounds
             wb0 = TD0[usize_b0_of_u32!(wa0)]
                 ^ TD1[usize_b1_of_u32!(wa3)]
                 ^ TD2[usize_b2_of_u32!(wa2)]
                 ^ TD3[usize_b3_of_u32!(wa1)]
-                ^ $keys[$keys_length - 8 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 8 - (8 * i)];
             wb1 = TD0[usize_b0_of_u32!(wa1)]
                 ^ TD1[usize_b1_of_u32!(wa0)]
                 ^ TD2[usize_b2_of_u32!(wa3)]
                 ^ TD3[usize_b3_of_u32!(wa2)]
-                ^ $keys[$keys_length - 7 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 7 - (8 * i)];
             wb2 = TD0[usize_b0_of_u32!(wa2)]
                 ^ TD1[usize_b1_of_u32!(wa1)]
                 ^ TD2[usize_b2_of_u32!(wa0)]
                 ^ TD3[usize_b3_of_u32!(wa3)]
-                ^ $keys[$keys_length - 6 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 6 - (8 * i)];
             wb3 = TD0[usize_b0_of_u32!(wa3)]
                 ^ TD1[usize_b1_of_u32!(wa2)]
                 ^ TD2[usize_b2_of_u32!(wa1)]
                 ^ TD3[usize_b3_of_u32!(wa0)]
-                ^ $keys[$keys_length - 5 - (8 * i)];
+                ^ $subkeys[$subkeys_length - 5 - (8 * i)];
         }
         // final round
         // accessing array elements by index in reverse order is faster than in normal order
-        $output[15] = SINV[usize_b3_of_u32!(wb0)] ^ u8_b3_of_u32!($keys[3]);
-        $output[14] = SINV[usize_b2_of_u32!(wb1)] ^ u8_b2_of_u32!($keys[3]);
-        $output[13] = SINV[usize_b1_of_u32!(wb2)] ^ u8_b1_of_u32!($keys[3]);
-        $output[12] = SINV[usize_b0_of_u32!(wb3)] ^ u8_b0_of_u32!($keys[3]);
-        $output[11] = SINV[usize_b3_of_u32!(wb3)] ^ u8_b3_of_u32!($keys[2]);
-        $output[10] = SINV[usize_b2_of_u32!(wb0)] ^ u8_b2_of_u32!($keys[2]);
-        $output[9] = SINV[usize_b1_of_u32!(wb1)] ^ u8_b1_of_u32!($keys[2]);
-        $output[8] = SINV[usize_b0_of_u32!(wb2)] ^ u8_b0_of_u32!($keys[2]);
-        $output[7] = SINV[usize_b3_of_u32!(wb2)] ^ u8_b3_of_u32!($keys[1]);
-        $output[6] = SINV[usize_b2_of_u32!(wb3)] ^ u8_b2_of_u32!($keys[1]);
-        $output[5] = SINV[usize_b1_of_u32!(wb0)] ^ u8_b1_of_u32!($keys[1]);
-        $output[4] = SINV[usize_b0_of_u32!(wb1)] ^ u8_b0_of_u32!($keys[1]);
-        $output[3] = SINV[usize_b3_of_u32!(wb1)] ^ u8_b3_of_u32!($keys[0]);
-        $output[2] = SINV[usize_b2_of_u32!(wb2)] ^ u8_b2_of_u32!($keys[0]);
-        $output[1] = SINV[usize_b1_of_u32!(wb3)] ^ u8_b1_of_u32!($keys[0]);
-        $output[0] = SINV[usize_b0_of_u32!(wb0)] ^ u8_b0_of_u32!($keys[0]);
+        $output[15] = SINV[usize_b3_of_u32!(wb0)] ^ u8_b3_of_u32!($subkeys[3]);
+        $output[14] = SINV[usize_b2_of_u32!(wb1)] ^ u8_b2_of_u32!($subkeys[3]);
+        $output[13] = SINV[usize_b1_of_u32!(wb2)] ^ u8_b1_of_u32!($subkeys[3]);
+        $output[12] = SINV[usize_b0_of_u32!(wb3)] ^ u8_b0_of_u32!($subkeys[3]);
+        $output[11] = SINV[usize_b3_of_u32!(wb3)] ^ u8_b3_of_u32!($subkeys[2]);
+        $output[10] = SINV[usize_b2_of_u32!(wb0)] ^ u8_b2_of_u32!($subkeys[2]);
+        $output[9] = SINV[usize_b1_of_u32!(wb1)] ^ u8_b1_of_u32!($subkeys[2]);
+        $output[8] = SINV[usize_b0_of_u32!(wb2)] ^ u8_b0_of_u32!($subkeys[2]);
+        $output[7] = SINV[usize_b3_of_u32!(wb2)] ^ u8_b3_of_u32!($subkeys[1]);
+        $output[6] = SINV[usize_b2_of_u32!(wb3)] ^ u8_b2_of_u32!($subkeys[1]);
+        $output[5] = SINV[usize_b1_of_u32!(wb0)] ^ u8_b1_of_u32!($subkeys[1]);
+        $output[4] = SINV[usize_b0_of_u32!(wb1)] ^ u8_b0_of_u32!($subkeys[1]);
+        $output[3] = SINV[usize_b3_of_u32!(wb1)] ^ u8_b3_of_u32!($subkeys[0]);
+        $output[2] = SINV[usize_b2_of_u32!(wb2)] ^ u8_b2_of_u32!($subkeys[0]);
+        $output[1] = SINV[usize_b1_of_u32!(wb3)] ^ u8_b1_of_u32!($subkeys[0]);
+        $output[0] = SINV[usize_b0_of_u32!(wb0)] ^ u8_b0_of_u32!($subkeys[0]);
     }};
 }
 
@@ -427,9 +438,9 @@ macro_rules! decryption_function {
 /// [`key_schedule_encrypt256`]: ../aes_core/fn.key_schedule_encrypt256.html
 pub fn key_schedule_encrypt_auto(origin: &[u8], buffer: &mut [u32]) {
     match origin.len() {
-        16 => key_schedule_128_function!(origin, buffer),
-        24 => key_schedule_192_function!(origin, buffer),
-        32 => key_schedule_256_function!(origin, buffer),
+        KEY_BYTES_128BIT => key_schedule_128_function!(origin, buffer),
+        KEY_BYTES_192BIT => key_schedule_192_function!(origin, buffer),
+        KEY_BYTES_256BIT => key_schedule_256_function!(origin, buffer),
         _ => panic!("Invalid key length."),
     }
 }
@@ -442,10 +453,10 @@ pub fn key_schedule_encrypt_auto(origin: &[u8], buffer: &mut [u32]) {
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt128;
 /// use aes_frast::misc::hex;
-/// const N_SUBKEYS_128BIT: usize = 44;
+/// use aes_frast::{KEY_BYTES_128BIT, N_SUBKEYS_128BIT};
 ///
 /// // This example key came from NIST.FIPS.197 Appendix A.1
-/// let origin_key: [u8; 16] = [
+/// let origin_key: [u8; KEY_BYTES_128BIT] = [
 ///     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
 ///     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C,
 /// ];
@@ -483,10 +494,10 @@ pub fn key_schedule_encrypt128(origin: &[u8], buffer: &mut [u32]) {
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt192;
 /// use aes_frast::misc::hex;
-/// const N_SUBKEYS_192BIT: usize = 52;
+/// use aes_frast::{KEY_BYTES_192BIT, N_SUBKEYS_192BIT};
 ///
 /// // This example key came from NIST.FIPS.197 Appendix A.2
-/// let origin_key: [u8; 24] = [
+/// let origin_key: [u8; KEY_BYTES_192BIT] = [
 ///     0x8E, 0x73, 0xB0, 0xF7, 0xDA, 0x0E, 0x64, 0x52,
 ///     0xC8, 0x10, 0xF3, 0x2B, 0x80, 0x90, 0x79, 0xE5,
 ///     0x62, 0xF8, 0xEA, 0xD2, 0x52, 0x2C, 0x6B, 0x7B,
@@ -527,10 +538,10 @@ pub fn key_schedule_encrypt192(origin: &[u8], buffer: &mut [u32]) {
 /// ```
 /// use aes_frast::aes_core::key_schedule_encrypt256;
 /// use aes_frast::misc::hex;
-/// const N_SUBKEYS_256BIT: usize = 60;
+/// use aes_frast::{KEY_BYTES_256BIT, N_SUBKEYS_256BIT};
 ///
 /// // This example key came from NIST.FIPS.197 Appendix A.3
-/// let origin_key: [u8; 32] = [
+/// let origin_key: [u8; KEY_BYTES_256BIT] = [
 ///     0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE,
 ///     0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D, 0x77, 0x81,
 ///     0x1F, 0x35, 0x2C, 0x07, 0x3B, 0x61, 0x08, 0xD7,
@@ -589,15 +600,15 @@ pub fn key_schedule_encrypt256(origin: &[u8], buffer: &mut [u32]) {
 /// [`key_schedule_decrypt256`]: ../aes_core/fn.key_schedule_decrypt256.html
 pub fn key_schedule_decrypt_auto(origin: &[u8], buffer: &mut [u32]) {
     match origin.len() {
-        16 => {
+        KEY_BYTES_128BIT => {
             key_schedule_128_function!(origin, buffer);
             dkey_mixcolumn!(buffer, N_SUBKEYS_128BIT);
         }
-        24 => {
+        KEY_BYTES_192BIT => {
             key_schedule_192_function!(origin, buffer);
             dkey_mixcolumn!(buffer, N_SUBKEYS_192BIT);
         }
-        32 => {
+        KEY_BYTES_256BIT => {
             key_schedule_256_function!(origin, buffer);
             dkey_mixcolumn!(buffer, N_SUBKEYS_256BIT);
         }
@@ -614,7 +625,7 @@ pub fn key_schedule_decrypt_auto(origin: &[u8], buffer: &mut [u32]) {
 ///
 /// [`key_schedule_encrypt128`]: ../aes_core/fn.key_schedule_encrypt128.html
 pub fn key_schedule_decrypt128(origin: &[u8], buffer: &mut [u32]) {
-    assert_eq!(origin.len(), 128 / 8);
+    assert_eq!(origin.len(), KEY_BYTES_128BIT);
     key_schedule_128_function!(origin, buffer);
     dkey_mixcolumn!(buffer, N_SUBKEYS_128BIT);
 }
@@ -628,7 +639,7 @@ pub fn key_schedule_decrypt128(origin: &[u8], buffer: &mut [u32]) {
 ///
 /// [`key_schedule_encrypt192`]: ../aes_core/fn.key_schedule_encrypt192.html
 pub fn key_schedule_decrypt192(origin: &[u8], buffer: &mut [u32]) {
-    assert_eq!(origin.len(), 192 / 8);
+    assert_eq!(origin.len(), KEY_BYTES_192BIT);
     key_schedule_192_function!(origin, buffer);
     dkey_mixcolumn!(buffer, N_SUBKEYS_192BIT);
 }
@@ -642,7 +653,7 @@ pub fn key_schedule_decrypt192(origin: &[u8], buffer: &mut [u32]) {
 ///
 /// [`key_schedule_encrypt256`]: ../aes_core/fn.key_schedule_encrypt256.html
 pub fn key_schedule_decrypt256(origin: &[u8], buffer: &mut [u32]) {
-    assert_eq!(origin.len(), 256 / 8);
+    assert_eq!(origin.len(), KEY_BYTES_256BIT);
     key_schedule_256_function!(origin, buffer);
     dkey_mixcolumn!(buffer, N_SUBKEYS_256BIT);
 }
@@ -656,14 +667,14 @@ pub fn key_schedule_decrypt256(origin: &[u8], buffer: &mut [u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt128, block_encrypt128_inplace};
-/// const N_SUBKEYS_128BIT: usize = 44;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_128BIT, N_SUBKEYS_128BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix B
-/// let mut data_buffer: [u8; 16] = [
+/// let mut data_buffer: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x32, 0x43, 0xF6, 0xA8, 0x88, 0x5A, 0x30, 0x8D,
 ///     0x31, 0x31, 0x98, 0xA2, 0xE0, 0x37, 0x07, 0x34,
 /// ];
-/// let origin_key: [u8; 16] = [
+/// let origin_key: [u8; KEY_BYTES_128BIT] = [
 ///     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
 ///     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C,
 /// ];
@@ -672,11 +683,11 @@ pub fn key_schedule_decrypt256(origin: &[u8], buffer: &mut [u32]) {
 /// key_schedule_encrypt128(&origin_key, &mut subkeys);
 /// block_encrypt128_inplace(&mut data_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x39, 0x25, 0x84, 0x1D, 0x02, 0xDC, 0x09, 0xFB,
 ///     0xDC, 0x11, 0x85, 0x97, 0x19, 0x6A, 0x0B, 0x32,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(data_buffer[i], expected[i]);
 /// }
 /// ```
@@ -693,14 +704,14 @@ pub fn block_encrypt128_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt192, block_encrypt192_inplace};
-/// const N_SUBKEYS_192BIT: usize = 52;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_192BIT, N_SUBKEYS_192BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.2
-/// let mut data_buffer: [u8; 16] = [
+/// let mut data_buffer: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// let origin_key: [u8; 24] = [
+/// let origin_key: [u8; KEY_BYTES_192BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -710,11 +721,11 @@ pub fn block_encrypt128_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_encrypt192(&origin_key, &mut subkeys);
 /// block_encrypt192_inplace(&mut data_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0xDD, 0xA9, 0x7C, 0xA4, 0x86, 0x4C, 0xDF, 0xE0,
 ///     0x6E, 0xAF, 0x70, 0xA0, 0xEC, 0x0D, 0x71, 0x91,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(data_buffer[i], expected[i]);
 /// }
 /// ```
@@ -731,14 +742,14 @@ pub fn block_encrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt256, block_encrypt256_inplace};
-/// const N_SUBKEYS_256BIT: usize = 60;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_256BIT, N_SUBKEYS_256BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.3
-/// let mut data_buffer: [u8; 16] = [
+/// let mut data_buffer: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// let origin_key: [u8; 32] = [
+/// let origin_key: [u8; KEY_BYTES_256BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -749,11 +760,11 @@ pub fn block_encrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_encrypt256(&origin_key, &mut subkeys);
 /// block_encrypt256_inplace(&mut data_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
 ///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(data_buffer[i], expected[i]);
 /// }
 /// ```
@@ -770,14 +781,14 @@ pub fn block_encrypt256_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt128, block_decrypt128_inplace};
-/// const N_SUBKEYS_128BIT: usize = 44;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_128BIT, N_SUBKEYS_128BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.1
-/// let mut data_buffer: [u8; 16] = [
+/// let mut data_buffer: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x69, 0xC4, 0xE0, 0xD8, 0x6A, 0x7B, 0x04, 0x30,
 ///     0xD8, 0xCD, 0xB7, 0x80, 0x70, 0xB4, 0xC5, 0x5A,
 /// ];
-/// let origin_key: [u8; 16] = [
+/// let origin_key: [u8; KEY_BYTES_128BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 /// ];
@@ -786,11 +797,11 @@ pub fn block_encrypt256_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_decrypt128(&origin_key, &mut subkeys);
 /// block_decrypt128_inplace(&mut data_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(data_buffer[i], expected[i]);
 /// }
 /// ```
@@ -807,14 +818,14 @@ pub fn block_decrypt128_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt192, block_decrypt192_inplace};
-/// const N_SUBKEYS_192BIT: usize = 52;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_192BIT, N_SUBKEYS_192BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.2
-/// let mut data_buffer: [u8; 16] = [
+/// let mut data_buffer: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0xDD, 0xA9, 0x7C, 0xA4, 0x86, 0x4C, 0xDF, 0xE0,
 ///     0x6E, 0xAF, 0x70, 0xA0, 0xEC, 0x0D, 0x71, 0x91,
 /// ];
-/// let origin_key: [u8; 24] = [
+/// let origin_key: [u8; KEY_BYTES_192BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -824,11 +835,11 @@ pub fn block_decrypt128_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_decrypt192(&origin_key, &mut subkeys);
 /// block_decrypt192_inplace(&mut data_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(data_buffer[i], expected[i]);
 /// }
 /// ```
@@ -845,14 +856,14 @@ pub fn block_decrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt256, block_decrypt256_inplace};
-/// const N_SUBKEYS_256BIT: usize = 60;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_256BIT, N_SUBKEYS_256BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.3
-/// let mut data_buffer: [u8; 16] = [
+/// let mut data_buffer: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
 ///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89,
 /// ];
-/// let origin_key: [u8; 32] = [
+/// let origin_key: [u8; KEY_BYTES_256BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -863,11 +874,11 @@ pub fn block_decrypt192_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_decrypt256(&origin_key, &mut subkeys);
 /// block_decrypt256_inplace(&mut data_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(data_buffer[i], expected[i]);
 /// }
 /// ```
@@ -885,16 +896,16 @@ pub fn block_decrypt256_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt128, block_encrypt128};
-/// const N_SUBKEYS_128BIT: usize = 44;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_128BIT, N_SUBKEYS_128BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix B
-/// let input_data: [u8; 16] = [
+/// let input_data: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x32, 0x43, 0xF6, 0xA8, 0x88, 0x5A, 0x30, 0x8D,
 ///     0x31, 0x31, 0x98, 0xA2, 0xE0, 0x37, 0x07, 0x34,
 /// ];
-/// let mut output_buffer: [u8; 16] = [0; 16];
+/// let mut output_buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
 ///
-/// let origin_key: [u8; 16] = [
+/// let origin_key: [u8; KEY_BYTES_128BIT] = [
 ///     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
 ///     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C,
 /// ];
@@ -903,11 +914,11 @@ pub fn block_decrypt256_inplace(block: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_encrypt128(&origin_key, &mut subkeys);
 /// block_encrypt128(&input_data,&mut output_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x39, 0x25, 0x84, 0x1D, 0x02, 0xDC, 0x09, 0xFB,
 ///     0xDC, 0x11, 0x85, 0x97, 0x19, 0x6A, 0x0B, 0x32,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(output_buffer[i], expected[i]);
 /// }
 /// ```
@@ -925,16 +936,16 @@ pub fn block_encrypt128(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt192, block_encrypt192};
-/// const N_SUBKEYS_192BIT: usize = 52;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_192BIT, N_SUBKEYS_192BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.2
-/// let input_data: [u8; 16] = [
+/// let input_data: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// let mut output_buffer: [u8; 16] = [0; 16];
+/// let mut output_buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
 ///
-/// let origin_key: [u8; 24] = [
+/// let origin_key: [u8; KEY_BYTES_192BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -944,11 +955,11 @@ pub fn block_encrypt128(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_encrypt192(&origin_key, &mut subkeys);
 /// block_encrypt192(&input_data, &mut output_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0xDD, 0xA9, 0x7C, 0xA4, 0x86, 0x4C, 0xDF, 0xE0,
 ///     0x6E, 0xAF, 0x70, 0xA0, 0xEC, 0x0D, 0x71, 0x91,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(output_buffer[i], expected[i]);
 /// }
 /// ```
@@ -966,16 +977,16 @@ pub fn block_encrypt192(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_encrypt256, block_encrypt256};
-/// const N_SUBKEYS_256BIT: usize = 60;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_256BIT, N_SUBKEYS_256BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.3
-/// let input_data: [u8; 16] = [
+/// let input_data: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// let mut output_buffer: [u8; 16] = [0; 16];
+/// let mut output_buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
 ///
-/// let origin_key: [u8; 32] = [
+/// let origin_key: [u8; KEY_BYTES_256BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -986,11 +997,11 @@ pub fn block_encrypt192(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_encrypt256(&origin_key, &mut subkeys);
 /// block_encrypt256(&input_data, &mut output_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
 ///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(output_buffer[i], expected[i]);
 /// }
 /// ```
@@ -1008,16 +1019,16 @@ pub fn block_encrypt256(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt128, block_decrypt128};
-/// const N_SUBKEYS_128BIT: usize = 44;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_128BIT, N_SUBKEYS_128BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.1
-/// let input_data: [u8; 16] = [
+/// let input_data: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x69, 0xC4, 0xE0, 0xD8, 0x6A, 0x7B, 0x04, 0x30,
 ///     0xD8, 0xCD, 0xB7, 0x80, 0x70, 0xB4, 0xC5, 0x5A,
 /// ];
-/// let mut output_buffer: [u8; 16] = [0; 16];
+/// let mut output_buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
 ///
-/// let origin_key: [u8; 16] = [
+/// let origin_key: [u8; KEY_BYTES_128BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 /// ];
@@ -1026,11 +1037,11 @@ pub fn block_encrypt256(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_decrypt128(&origin_key, &mut subkeys);
 /// block_decrypt128(&input_data, &mut output_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(output_buffer[i], expected[i]);
 /// }
 /// ```
@@ -1048,16 +1059,16 @@ pub fn block_decrypt128(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt192, block_decrypt192};
-/// const N_SUBKEYS_192BIT: usize = 52;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_192BIT, N_SUBKEYS_192BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.2
-/// let input_data: [u8; 16] = [
+/// let input_data: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0xDD, 0xA9, 0x7C, 0xA4, 0x86, 0x4C, 0xDF, 0xE0,
 ///     0x6E, 0xAF, 0x70, 0xA0, 0xEC, 0x0D, 0x71, 0x91,
 /// ];
-/// let mut output_buffer: [u8; 16] = [0; 16];
+/// let mut output_buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
 ///
-/// let origin_key: [u8; 24] = [
+/// let origin_key: [u8; KEY_BYTES_192BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -1067,11 +1078,11 @@ pub fn block_decrypt128(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_decrypt192(&origin_key, &mut subkeys);
 /// block_decrypt192(&input_data, &mut output_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(output_buffer[i], expected[i]);
 /// }
 /// ```
@@ -1089,16 +1100,16 @@ pub fn block_decrypt192(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// # Examples
 /// ```
 /// use aes_frast::aes_core::{key_schedule_decrypt256, block_decrypt256};
-/// const N_SUBKEYS_256BIT: usize = 60;
+/// use aes_frast::{BLOCKSIZE_IN_BYTES, KEY_BYTES_256BIT, N_SUBKEYS_256BIT};
 ///
 /// // This example came from NIST.FIPS.197 Appendix C.3
-/// let input_data: [u8; 16] = [
+/// let input_data: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
 ///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89,
 /// ];
-/// let mut output_buffer: [u8; 16] = [0; 16];
+/// let mut output_buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
 ///
-/// let origin_key: [u8; 32] = [
+/// let origin_key: [u8; KEY_BYTES_256BIT] = [
 ///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 ///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -1109,11 +1120,11 @@ pub fn block_decrypt192(input: &[u8], output: &mut [u8], subkeys: &[u32]) {
 /// key_schedule_decrypt256(&origin_key, &mut subkeys);
 /// block_decrypt256(&input_data, &mut output_buffer, &subkeys);
 ///
-/// let expected: [u8; 16] = [
+/// let expected: [u8; BLOCKSIZE_IN_BYTES] = [
 ///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 ///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
 /// ];
-/// for i in 0..16 {
+/// for i in 0..BLOCKSIZE_IN_BYTES {
 ///     assert_eq!(output_buffer[i], expected[i]);
 /// }
 /// ```
@@ -1128,7 +1139,7 @@ mod tests {
 
     #[test]
     fn key_schedule_decrypt128_works() {
-        let origin_key: [u8; 16] = [
+        let origin_key: [u8; KEY_BYTES_128BIT] = [
             0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF,
             0x4F, 0x3C,
         ];
@@ -1187,7 +1198,7 @@ mod tests {
 
     #[test]
     fn key_schedule_decrypt192_works() {
-        let origin_key: [u8; 24] = [
+        let origin_key: [u8; KEY_BYTES_192BIT] = [
             0x8E, 0x73, 0xB0, 0xF7, 0xDA, 0x0E, 0x64, 0x52, 0xC8, 0x10, 0xF3, 0x2B, 0x80, 0x90,
             0x79, 0xE5, 0x62, 0xF8, 0xEA, 0xD2, 0x52, 0x2C, 0x6B, 0x7B,
         ];
@@ -1254,7 +1265,7 @@ mod tests {
 
     #[test]
     fn key_schedule_decrypt256_works() {
-        let origin_key: [u8; 32] = [
+        let origin_key: [u8; KEY_BYTES_256BIT] = [
             0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE, 0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D,
             0x77, 0x81, 0x1F, 0x35, 0x2C, 0x07, 0x3B, 0x61, 0x08, 0xD7, 0x2D, 0x98, 0x10, 0xA3,
             0x09, 0x14, 0xDF, 0xF4,
@@ -1330,7 +1341,7 @@ mod tests {
 
     #[test]
     fn key_schedule_encrypt_auto_works() {
-        let origin128: [u8; 16] = [
+        let origin128: [u8; KEY_BYTES_128BIT] = [
             0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF,
             0x4F, 0x3C,
         ];
@@ -1341,7 +1352,7 @@ mod tests {
         for i in 0..N_SUBKEYS_128BIT {
             assert_eq!(scheduled128a[i], scheduled128b[i]);
         }
-        let origin192: [u8; 24] = [
+        let origin192: [u8; KEY_BYTES_192BIT] = [
             0x8E, 0x73, 0xB0, 0xF7, 0xDA, 0x0E, 0x64, 0x52, 0xC8, 0x10, 0xF3, 0x2B, 0x80, 0x90,
             0x79, 0xE5, 0x62, 0xF8, 0xEA, 0xD2, 0x52, 0x2C, 0x6B, 0x7B,
         ];
@@ -1352,7 +1363,7 @@ mod tests {
         for i in 0..N_SUBKEYS_192BIT {
             assert_eq!(scheduled192a[i], scheduled192b[i]);
         }
-        let origin256: [u8; 32] = [
+        let origin256: [u8; KEY_BYTES_256BIT] = [
             0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE, 0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D,
             0x77, 0x81, 0x1F, 0x35, 0x2C, 0x07, 0x3B, 0x61, 0x08, 0xD7, 0x2D, 0x98, 0x10, 0xA3,
             0x09, 0x14, 0xDF, 0xF4,
@@ -1368,7 +1379,7 @@ mod tests {
 
     #[test]
     fn key_schedule_decrypt_auto_works() {
-        let origin128: [u8; 16] = [
+        let origin128: [u8; KEY_BYTES_128BIT] = [
             0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF,
             0x4F, 0x3C,
         ];
@@ -1379,7 +1390,7 @@ mod tests {
         for i in 0..N_SUBKEYS_128BIT {
             assert_eq!(scheduled128a[i], scheduled128b[i]);
         }
-        let origin192: [u8; 24] = [
+        let origin192: [u8; KEY_BYTES_192BIT] = [
             0x8E, 0x73, 0xB0, 0xF7, 0xDA, 0x0E, 0x64, 0x52, 0xC8, 0x10, 0xF3, 0x2B, 0x80, 0x90,
             0x79, 0xE5, 0x62, 0xF8, 0xEA, 0xD2, 0x52, 0x2C, 0x6B, 0x7B,
         ];
@@ -1390,7 +1401,7 @@ mod tests {
         for i in 0..N_SUBKEYS_192BIT {
             assert_eq!(scheduled192a[i], scheduled192b[i]);
         }
-        let origin256: [u8; 32] = [
+        let origin256: [u8; KEY_BYTES_256BIT] = [
             0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE, 0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D,
             0x77, 0x81, 0x1F, 0x35, 0x2C, 0x07, 0x3B, 0x61, 0x08, 0xD7, 0x2D, 0x98, 0x10, 0xA3,
             0x09, 0x14, 0xDF, 0xF4,

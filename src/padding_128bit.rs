@@ -2,6 +2,8 @@
 //! `padding_128bit` is a padding mod for block cipher which use 128 bits blocks, especially the
 //! `aes_core` module.
 
+use super::aes_core::BLOCKSIZE_IN_BYTES;
+
 /// Add PKCS #7 padding
 ///
 /// * *parameter* `input_vec`: the vec that contains original data.
@@ -19,7 +21,7 @@
 ///                         0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8]);
 /// ```
 pub fn pa_pkcs7(input_vec: &mut Vec<u8>) -> usize {
-    let r = 16 - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
     input_vec.append(&mut vec![r as u8; r]);
     r
 }
@@ -41,7 +43,7 @@ pub fn pa_pkcs7(input_vec: &mut Vec<u8>) -> usize {
 ///                         0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x09u8]);
 /// ```
 pub fn pa_ansix923(input_vec: &mut Vec<u8>) -> usize {
-    let r = 16 - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
     let mut tail = vec![0u8; r];
     *tail.last_mut().unwrap() = r as u8;
     input_vec.append(&mut tail);
@@ -117,7 +119,7 @@ pub fn de_ansix923_pkcs7(input_vec: &mut Vec<u8>) -> usize {
 ///
 /// [`pa_zeros_ifnotcomplete`]: ../padding_128bit/fn.pa_zeros_ifnotcomplete.html
 pub fn pa_zeros(input_vec: &mut Vec<u8>) -> usize {
-    let r = 16 - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
     input_vec.append(&mut vec![0u8; r]);
     r
 }
@@ -156,8 +158,8 @@ pub fn pa_zeros(input_vec: &mut Vec<u8>) -> usize {
 ///
 /// [`pa_zeros`]: ../padding_128bit/fn.pa_zeros.html
 pub fn pa_zeros_ifnotcomplete(input_vec: &mut Vec<u8>) -> usize {
-    let r = 16 - (input_vec.len() & 0b1111);
-    if r < 16 {
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
+    if r < BLOCKSIZE_IN_BYTES {
         input_vec.append(&mut vec![0u8; r]);
         r
     } else {
@@ -221,7 +223,7 @@ pub fn de_zeros(input_vec: &mut Vec<u8>) -> usize {
 /// ```
 pub fn drop_last_block(input_vec: &mut Vec<u8>) -> usize {
     let r = match input_vec.len() & 0b1111 {
-        0 => 16,
+        0 => BLOCKSIZE_IN_BYTES,
         r => r,
     };
     input_vec.truncate(input_vec.len() - r);

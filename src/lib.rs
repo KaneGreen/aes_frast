@@ -31,6 +31,10 @@ pub mod misc {
     }
 }
 
-pub use aes_core::N_SUBKEYS_128BIT;
-pub use aes_core::N_SUBKEYS_192BIT;
-pub use aes_core::N_SUBKEYS_256BIT;
+pub use crate::aes_core::BLOCKSIZE_IN_BYTES;
+pub use crate::aes_core::KEY_BYTES_128BIT;
+pub use crate::aes_core::KEY_BYTES_192BIT;
+pub use crate::aes_core::KEY_BYTES_256BIT;
+pub use crate::aes_core::N_SUBKEYS_128BIT;
+pub use crate::aes_core::N_SUBKEYS_192BIT;
+pub use crate::aes_core::N_SUBKEYS_256BIT;

@@ -1,5 +1,9 @@
 #  Change Log
 
+## 0.2.1 (2022-11-03)
+* Export more constant.
+* Update document.
+
 ## 0.2.0 (2022-11-01)
 * **BREAK CHANGES**: function name changed!
 * Improve performance (internal implementation changed).
