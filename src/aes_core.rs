@@ -206,7 +206,7 @@ macro_rules! key_schedule_256_function {
 macro_rules! dkey_mixcolumn {
     ($subkeys:ident, $length:expr) => {{
         // The first and the last round don't need the inverse MixColumn transform
-        for i in 4..(($length) - 4) {
+        for i in 4..($length - 4) {
             $subkeys[i] = TD0[SBOX[usize_b0_of_u32!($subkeys[i])] as usize]
                 ^ TD1[SBOX[usize_b1_of_u32!($subkeys[i])] as usize]
                 ^ TD2[SBOX[usize_b2_of_u32!($subkeys[i])] as usize]
@@ -248,7 +248,7 @@ macro_rules! encryption_function {
             ^ TE3[usize_b3_of_u32!(wa2)]
             ^ $subkeys[7];
         // round 2 to round 9 (or 11, 13)
-        for i in 1..($inner_rounds) {
+        for i in 1..$inner_rounds {
             // even-number rounds
             wa0 = TE0[usize_b0_of_u32!(wb0)]
                 ^ TE1[usize_b1_of_u32!(wb1)]
@@ -350,7 +350,7 @@ macro_rules! decryption_function {
             ^ TD3[usize_b3_of_u32!(wa0)]
             ^ $subkeys[$subkeys_length - 5];
         // round 2 to round 9 (or 11, 13)
-        for i in 1..($inner_rounds) {
+        for i in 1..$inner_rounds {
             // even-number rounds
             wa0 = TD0[usize_b0_of_u32!(wb0)]
                 ^ TD1[usize_b1_of_u32!(wb3)]
