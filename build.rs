@@ -1,13 +1,13 @@
-use std::env;
-use std::fs;
-use std::path::Path;
-
+//! This build script contains computations to generate S-box and other lookup
+//! tables that excutes only once, before compiling.
+//! The algorithms here are meant to demonstrate how the computations are done,
+//! not high-performance Galois Field operations. In other words, the Galois
+//! field algorithm here is not optimized.
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join("tables.rs");
+    let dest_path = std::path::Path::new(&std::env::var_os("OUT_DIR").unwrap()).join("tables.rs");
     let tables_txt = calculate_tables();
-    fs::write(&dest_path, tables_txt).unwrap();
+    std::fs::write(dest_path, tables_txt).unwrap();
 }
 fn calculate_tables() -> String {
     use crate::aes_affine_mapping::aes_sbox_affine_mapping as affine_mapping;
@@ -42,9 +42,7 @@ fn calculate_tables() -> String {
     let mut d_t3_code = String::with_capacity(4096);
     d_t3_code.push_str("// T-Box 3 for decryption\nstatic TD3: &[u32; 256] = &[\n");
     // Three variables to temporarily store numbers.
-    let mut inverse: u8;
-    #[allow(non_snake_case)]
-    let mut afterAM: u8;
+    let mut mapped_inverse: u8;
     let mut invsbox: u8;
     let mut number: u8;
     for m in 0..16 {
@@ -61,16 +59,15 @@ fn calculate_tables() -> String {
         for n in 0..16 {
             number = (m << 4) | n;
             gf.set(number);
-            inverse = gf.inverse().unwrap_or_default().get_byte();
-            afterAM = affine_mapping(inverse);
-            substitued_gf.set(afterAM);
+            mapped_inverse = affine_mapping(gf.inverse().unwrap_or_default().get_byte());
+            substitued_gf.set(mapped_inverse);
             // Although the table of the inversed S-Box can be Obtained by looking up
             // S-Box table inversely, it doesn't hurt to know compute it with matrix
             // for studying AES.
             gf.set(inverse_mapping(number));
             invrsboxed_gf = gf.inverse().unwrap_or_default();
             invsbox = invrsboxed_gf.get_byte();
-            sboxtable_code.push_str(format!("0x{:02X}, ", afterAM).as_str());
+            sboxtable_code.push_str(format!("0x{:02X}, ", mapped_inverse).as_str());
             inversetable_code.push_str(format!("0x{:02X}, ", invsbox).as_str());
             e_t0_code.push_str(format!("0x{:08X}, ", e_t0_element(&substitued_gf)).as_str());
             e_t1_code.push_str(format!("0x{:08X}, ", e_t1_element(&substitued_gf)).as_str());
@@ -163,7 +160,6 @@ mod gf28 {
     use std::ops::{Add, Div, Mul, Sub};
     // There is a small difference between `derive` and `impl` manually.
     // https://doc.rust-lang.org/std/marker/trait.Copy.html#how-can-i-implement-copy
-    #[allow(non_camel_case_types)]
     #[derive(Copy, Clone)]
     pub struct GF2_8 {
         inner: u8,
@@ -176,7 +172,7 @@ mod gf28 {
     }
     // AES standard use this inrreducible polynomial:
     // x^8 + x^4 + x^3 + x + 1
-    const IRREDU_POLYNO: u16 = 0b_1_0001_1011;
+    const IRREDU_POLYNO: u16 = 0b1_0001_1011;
     /// Bitwise multipl and mod for inner u16 computing.  
     /// Like a function parameters, the pattern should be `(left: u16, right: u16)`.  
     /// And this returns `u16`.

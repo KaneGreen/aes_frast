@@ -8,8 +8,6 @@ pub mod aes_core;
 pub mod aes_with_operation_mode;
 /// The `padding_128bit` mod provides padding and depadding functions for 128bit-block crypto.
 pub mod padding_128bit;
-///// The `aes_with_operation_mode_inplace` mod is similar to `aes_with_operation_mode` but operates inplace.
-//pub mod aes_with_operation_mode_inplace;
 
 /// Miscellaneous functions
 pub mod misc {
