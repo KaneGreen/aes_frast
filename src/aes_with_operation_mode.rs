@@ -405,8 +405,8 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// This function encrypts a long plain from the first parameter and put the long cipher
 /// into the second parameter, using the scheduled keys and the initialization vector (IV)
 /// in the third and fourth parameters.  
-/// However, if you use the corresponding [`key_schedule_decrypt_auto`], [`key_schedule_decrypt128`], [`key_schedule_decrypt192`]
-/// or [`key_schedule_decrypt256`] function to schedule the keys, and then use this function again,
+/// However, if you use the corresponding [`key_schedule_encrypt_auto`], [`key_schedule_encrypt128`], [`key_schedule_encrypt192`]
+/// or [`key_schedule_encrypt256`] function to schedule the keys, and then use this function again,
 /// it will decrypt the first parameter into the second parameter.  
 /// Finally, it returns the final block of the encryptor output (neither the plain nor cipher).  
 /// ![OFB encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/OFB_encryption.svg/1280px-OFB_encryption.svg.png)
@@ -538,10 +538,10 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 ///
 /// aes_core::key_schedule_encrypt_auto(&o_key, &mut w_keys);
 /// padding_128bit::pa_pkcs7(&mut plain);
-/// aes_with_operation_mode::cbc_enc(&plain, &mut cipher, &w_keys, &iv);
+/// aes_with_operation_mode::pcbc_enc(&plain, &mut cipher, &w_keys, &iv);
 ///
 /// aes_core::key_schedule_decrypt_auto(&o_key, &mut w_keys);
-/// aes_with_operation_mode::cbc_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
+/// aes_with_operation_mode::pcbc_dec(&cipher, &mut dec_cipher, &w_keys, &iv);
 /// padding_128bit::de_ansix923_pkcs7(&mut dec_cipher);
 ///
 /// for i in 0..length {

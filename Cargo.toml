@@ -1,7 +1,7 @@
 [package]
 name = "aes_frast"
 version = "0.2.2"
-edition = "2021"
+edition = "2024"
 authors = ["KaneGreen <737445366KG@Gmail.com>"]
 license = "Apache-2.0"
 description = "An easy-to-use lib for AES encryption and decryption, coded in pure safe Rust-lang."
@@ -12,6 +12,10 @@ categories = ["cryptography"]
 keywords = ["crypto", "aes"]
 
 [dependencies]
+
+[[test]]
+name = "build_script"
+path = "build.rs"
 
 [profile.release]
 codegen-units = 1
