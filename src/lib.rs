@@ -20,12 +20,13 @@ pub mod misc {
     /// assert_eq!(word, u32::from_le_bytes([0x0A, 0x0B, 0x0C, 0x0D]));
     /// ```
     /// # Panics
-    /// This function panics if `s` is not a valid hexadecimal integer in the `u32` range.
-    #[inline(always)]
+    /// This function panics if `s` is not exactly 8 hexadecimal ASCII characters.
+    #[inline]
     pub fn hex(s: &str) -> u32 {
+        assert_eq!(s.len(), 8, "hex string is not 8 characters long");
         ::std::primitive::u32::from_str_radix(s, 16)
             .unwrap()
-            .to_be()
+            .swap_bytes()
     }
 }
 
