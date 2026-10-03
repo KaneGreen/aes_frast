@@ -1,5 +1,13 @@
 #  Change Log
 
+## 0.3.0 (2026-10-03)
+* Fix error on big-endian platforms.
+* Fix error on empty vec.
+* Fix mistakes in docs.
+
+## 0.2.2 (2023-08-20)
+* Minor update on code.
+
 ## 0.2.1 (2022-11-03)
 * Export more constant.
 * Update document.
