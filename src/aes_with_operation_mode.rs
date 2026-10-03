@@ -1,5 +1,23 @@
 //! # aes_with_operation_mode
 //! `aes_with_operation_mode` allows you to use AES with operation modes like CBC, CFB and so on.  
+//!
+//! # Input and output lengths
+//! ECB, CBC and PCBC process only complete 16-byte blocks. Any incomplete tail is
+//! left to the caller to retain and combine with subsequent input. These functions
+//! do not buffer that tail internally. The output must have room for the complete
+//! blocks, and bytes beyond the processed prefix are left unchanged.
+//!
+//! CFB, CFB8 and OFB process every input byte, so the output must be at least as long
+//! as the input. A larger output is allowed; its unused suffix is left unchanged.
+//!
+//! If no bytes can be processed, the output is left unchanged. ECB returns an empty
+//! vector; modes with an IV return the unchanged IV. This also applies to inputs
+//! shorter than one block in CBC and PCBC.
+//!
+//! # Panics
+//! These functions panic before writing output if the scheduled key length is
+//! invalid, the output is too short for the bytes to be processed, or the IV is not
+//! exactly 16 bytes. Key and IV lengths are checked even when no bytes are processed.
 use super::aes_core::{self, BLOCKSIZE_IN_BYTES};
 use std::mem;
 macro_rules! select_encrypt_function {
@@ -27,6 +45,8 @@ macro_rules! select_decrypt_function {
 /// This function encrypts a long plain from the first parameter and put the long cipher
 /// into the second parameter, using the scheduled keys in the third parameter.  
 /// Finally, it returns the final block of the cipher (NOT the plain).  
+/// If there is no complete input block, it leaves the output unchanged and returns
+/// an empty vector. See the module documentation for incomplete-tail handling.
 /// ![ECB encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/ECB_encryption.svg/1280px-ECB_encryption.svg.png)
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
@@ -80,12 +100,18 @@ macro_rules! select_decrypt_function {
 /// ```
 pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
-    // `>> 4` is the same as `/ 16` and `<< 4` is the same as `* 4`.
-    let block_number = plain.len() >> 4;
+    let block_number = plain.len() / BLOCKSIZE_IN_BYTES;
+    assert!(
+        cipher.len() >= block_number * BLOCKSIZE_IN_BYTES,
+        "Output buffer is too short."
+    );
+    if block_number == 0 {
+        return Vec::new();
+    }
     let mut start = 0;
     let mut end = BLOCKSIZE_IN_BYTES;
     for i in 0..block_number {
-        start = i << 4;
+        start = i * BLOCKSIZE_IN_BYTES;
         end = start + BLOCKSIZE_IN_BYTES;
         encryptor(&plain[start..end], &mut cipher[start..end], keys);
     }
@@ -97,6 +123,8 @@ pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// into the second parameter, using the scheduled keys in the third parameter.  
 /// Finally, it returns the final block of the cipher (NOT the plain).  
 /// ![ECB decryption](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/ECB_decryption.svg/1280px-ECB_decryption.svg.png)
+/// If there is no complete input block, it leaves the output unchanged and returns
+/// an empty vector. See the module documentation for incomplete-tail handling.
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// Please refer to the [`ecb_enc`] function, codes are included there.
@@ -104,11 +132,18 @@ pub fn ecb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// [`ecb_enc`]: ../aes_with_operation_mode/fn.ecb_enc.html
 pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
     let decryptor = select_decrypt_function!(keys);
-    let block_number = cipher.len() >> 4;
+    let block_number = cipher.len() / BLOCKSIZE_IN_BYTES;
+    assert!(
+        plain.len() >= block_number * BLOCKSIZE_IN_BYTES,
+        "Output buffer is too short."
+    );
+    if block_number == 0 {
+        return Vec::new();
+    }
     let mut start = 0;
     let mut end = BLOCKSIZE_IN_BYTES;
     for i in 0..block_number {
-        start = i << 4;
+        start = i * BLOCKSIZE_IN_BYTES;
         end = start + BLOCKSIZE_IN_BYTES;
         decryptor(&cipher[start..end], &mut plain[start..end], keys);
     }
@@ -121,6 +156,8 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// in the third and fourth parameters.  
 /// Finally, it returns the final block of the cipher (NOT the plain).  
 /// ![CBC encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/CBC_encryption.svg/1280px-CBC_encryption.svg.png)
+/// If there is no complete input block, it leaves the output unchanged and returns
+/// the unchanged IV. See the module documentation for incomplete-tail handling.
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// ```
@@ -174,6 +211,15 @@ pub fn ecb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32]) -> Vec<u8> {
 /// ```
 pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    let block_number = plain.len() / BLOCKSIZE_IN_BYTES;
+    assert!(
+        cipher.len() >= block_number * BLOCKSIZE_IN_BYTES,
+        "Output buffer is too short."
+    );
+    if block_number == 0 {
+        return iv.to_vec();
+    }
     let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     for j in 0..BLOCKSIZE_IN_BYTES {
@@ -181,10 +227,9 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     }
     encryptor(&buffer, &mut cipher[..BLOCKSIZE_IN_BYTES], keys);
     // The other blocks
-    let block_number = plain.len() >> 4;
     let mut start = 0;
     for i in 1..block_number {
-        start = i << 4;
+        start = i * BLOCKSIZE_IN_BYTES;
         for j in 0..BLOCKSIZE_IN_BYTES {
             buffer[j] = cipher[start + j - BLOCKSIZE_IN_BYTES] ^ plain[start + j];
         }
@@ -203,6 +248,8 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// in the third and fourth parameters.  
 /// Finally, it returns the final block of the cipher (NOT the plain).  
 /// ![CBC decryption](https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/CBC_decryption.svg/1280px-CBC_decryption.svg.png)
+/// If there is no complete input block, it leaves the output unchanged and returns
+/// the unchanged IV. See the module documentation for incomplete-tail handling.
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// Please refer to the [`cbc_enc`] function, codes are included there.
@@ -210,6 +257,15 @@ pub fn cbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// [`cbc_enc`]: ../aes_with_operation_mode/fn.cbc_enc.html
 pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let decryptor = select_decrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    let block_number = cipher.len() / BLOCKSIZE_IN_BYTES;
+    assert!(
+        plain.len() >= block_number * BLOCKSIZE_IN_BYTES,
+        "Output buffer is too short."
+    );
+    if block_number == 0 {
+        return iv.to_vec();
+    }
     let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     decryptor(&cipher[..BLOCKSIZE_IN_BYTES], &mut buffer, keys);
@@ -217,10 +273,9 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         plain[j] = iv[j] ^ buffer[j];
     }
     // The other blocks
-    let block_number = cipher.len() >> 4;
     let mut start = 0;
     for i in 1..block_number {
-        start = i << 4;
+        start = i * BLOCKSIZE_IN_BYTES;
         decryptor(
             &cipher[start..(start + BLOCKSIZE_IN_BYTES)],
             &mut buffer,
@@ -242,6 +297,7 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// in the third and fourth parameters.  
 /// Finally, it returns the final block of the cipher (NOT the plain).  
 /// ![CFB encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/CFB_encryption.svg/1280px-CFB_encryption.svg.png)
+/// Empty input leaves the output unchanged and returns the unchanged IV.
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// ```
@@ -293,12 +349,17 @@ pub fn cbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// ```
 pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    assert!(cipher.len() >= plain.len(), "Output buffer is too short.");
+    if plain.is_empty() {
+        return iv.to_vec();
+    }
     let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // If input has only one block, consider it as the last block, not the 1st.
     // If input has only two blocks, consider it has no middle blocks.
     // The 1st (head) block
     encryptor(iv, &mut buffer, keys);
-    let block_number = plain.len() >> 4;
+    let block_number = plain.len() / BLOCKSIZE_IN_BYTES;
     let mut start = 0;
     if plain.len() >= BLOCKSIZE_IN_BYTES {
         for j in 0..BLOCKSIZE_IN_BYTES {
@@ -306,7 +367,7 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         }
         // The middle blocks
         for i in 1..block_number {
-            start = i << 4;
+            start = i * BLOCKSIZE_IN_BYTES;
             encryptor(
                 &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
                 &mut buffer,
@@ -318,10 +379,10 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
         }
     }
     // The last (tail) block
-    match plain.len() & 0b1111 {
+    match plain.len() % BLOCKSIZE_IN_BYTES {
         r if r != 0 => {
             if block_number != 0 {
-                start = block_number << 4;
+                start = block_number * BLOCKSIZE_IN_BYTES;
                 encryptor(
                     &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
                     &mut buffer,
@@ -346,6 +407,7 @@ pub fn cfb_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// in the third and fourth parameters.  
 /// Finally, it returns the final block of the cipher (NOT the plain).  
 /// ![CFB decryption](https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/CFB_decryption.svg/1280px-CFB_decryption.svg.png)
+/// Empty input leaves the output unchanged and returns the unchanged IV.
 /// (This picture comes from the Wikimedia Commons)
 /// # Examples
 /// Please refer to the [`cfb_enc`] function, codes are included there.
@@ -356,18 +418,23 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
     // in the last line. Both functions return `&cipher[start..(start + BLOCKSIZE_IN_BYTES)]`, which is the first
     // parameter in this function, while it's the second parameter in the `cfb_enc` function.
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    assert!(plain.len() >= cipher.len(), "Output buffer is too short.");
+    if cipher.is_empty() {
+        return iv.to_vec();
+    }
     let mut buffer: [u8; BLOCKSIZE_IN_BYTES] = [0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     encryptor(iv, &mut buffer, keys);
-    let block_number = plain.len() >> 4;
+    let block_number = cipher.len() / BLOCKSIZE_IN_BYTES;
     let mut start = 0;
     if cipher.len() >= BLOCKSIZE_IN_BYTES {
         for j in 0..BLOCKSIZE_IN_BYTES {
             plain[j] = buffer[j] ^ cipher[j]
         }
         // The middle blocks
-        for i in 1usize..block_number {
-            start = i << 4;
+        for i in 1..block_number {
+            start = i * BLOCKSIZE_IN_BYTES;
             encryptor(
                 &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
                 &mut buffer,
@@ -378,11 +445,11 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
             }
         }
     }
-    match cipher.len() & 0b1111 {
+    match cipher.len() % BLOCKSIZE_IN_BYTES {
         // The last (tail) block
         r if r != 0 => {
             if block_number != 0 {
-                start = block_number << 4;
+                start = block_number * BLOCKSIZE_IN_BYTES;
                 encryptor(
                     &cipher[(start - BLOCKSIZE_IN_BYTES)..start],
                     &mut buffer,
@@ -409,6 +476,7 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// or [`key_schedule_encrypt256`] function to schedule the keys, and then use this function again,
 /// it will decrypt the first parameter into the second parameter.  
 /// Finally, it returns the final block of the encryptor output (neither the plain nor cipher).  
+/// Empty input leaves the output unchanged and returns the unchanged IV.
 /// ![OFB encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/OFB_encryption.svg/1280px-OFB_encryption.svg.png)
 /// ![OFB decryption](https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/OFB_decryption.svg/1280px-OFB_decryption.svg.png)
 /// (These pictures comes from the Wikimedia Commons)
@@ -467,11 +535,16 @@ pub fn cfb_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<
 /// [`key_schedule_decrypt256`]: ../aes_core/fn.key_schedule_decrypt256.html
 pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    assert!(output.len() >= input.len(), "Output buffer is too short.");
+    if input.is_empty() {
+        return iv.to_vec();
+    }
     let mut buffer_new = vec![0; BLOCKSIZE_IN_BYTES];
     let mut buffer_last = vec![0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     encryptor(iv, &mut buffer_new, keys);
-    let block_number = input.len() >> 4;
+    let block_number = input.len() / BLOCKSIZE_IN_BYTES;
     let mut start;
     if input.len() >= BLOCKSIZE_IN_BYTES {
         for j in 0..BLOCKSIZE_IN_BYTES {
@@ -479,7 +552,7 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
         }
         // The middle blocks
         for i in 1..block_number {
-            start = i << 4;
+            start = i * BLOCKSIZE_IN_BYTES;
             mem::swap(&mut buffer_new, &mut buffer_last);
             encryptor(&buffer_last, &mut buffer_new, keys);
             for j in 0..BLOCKSIZE_IN_BYTES {
@@ -489,10 +562,10 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
     } else {
         buffer_new = Vec::from(iv);
     }
-    match input.len() & 0b1111 {
+    match input.len() % BLOCKSIZE_IN_BYTES {
         // The last (tail) block
         r if r != 0 => {
-            start = block_number << 4;
+            start = block_number * BLOCKSIZE_IN_BYTES;
             mem::swap(&mut buffer_new, &mut buffer_last);
             encryptor(&buffer_last, &mut buffer_new, keys);
             for j in 0..r {
@@ -510,6 +583,8 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// in the third and fourth parameters.  
 /// Finally, it returns the XOR result of the final block of the cipher and the final block of the plain.
 /// ![PCBC encryption](https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PCBC_encryption.svg/1280px-PCBC_encryption.svg.png)
+/// If there is no complete input block, it leaves the output unchanged and returns
+/// the unchanged IV. See the module documentation for incomplete-tail handling.
 /// (This picture comes from the Wikimedia Commons)  
 /// **\[Attention!\]** On a message encrypted in PCBC mode, if two adjacent ciphertext blocks
 /// are exchanged, this does not affect the decryption of subsequent blocks.
@@ -550,6 +625,15 @@ pub fn ofb_enc_dec(input: &[u8], output: &mut [u8], keys: &[u32], iv: &[u8]) -> 
 /// ```
 pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    let block_number = plain.len() / BLOCKSIZE_IN_BYTES;
+    assert!(
+        cipher.len() >= block_number * BLOCKSIZE_IN_BYTES,
+        "Output buffer is too short."
+    );
+    if block_number == 0 {
+        return iv.to_vec();
+    }
     let mut buffer = vec![0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     for j in 0..BLOCKSIZE_IN_BYTES {
@@ -557,10 +641,9 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
     }
     encryptor(&buffer, &mut cipher[..BLOCKSIZE_IN_BYTES], keys);
     // The other blocks
-    let block_number = plain.len() >> 4;
     let mut start = 0;
     for i in 1..block_number {
-        start = i << 4;
+        start = i * BLOCKSIZE_IN_BYTES;
         for j in 0..BLOCKSIZE_IN_BYTES {
             buffer[j] = cipher[start + j - BLOCKSIZE_IN_BYTES]
                 ^ plain[start + j - BLOCKSIZE_IN_BYTES]
@@ -584,6 +667,8 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// in the third and fourth parameters.  
 /// Finally, it returns the XOR result of the final block of the cipher and the final block of the plain.
 /// ![PCBC decryption](https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/PCBC_decryption.svg/1280px-PCBC_decryption.svg.png)
+/// If there is no complete input block, it leaves the output unchanged and returns
+/// the unchanged IV. See the module documentation for incomplete-tail handling.
 /// (This picture comes from the Wikimedia Commons)  
 /// **\[Attention!\]** On a message encrypted in PCBC mode, if two adjacent ciphertext blocks
 /// are exchanged, this does not affect the decryption of subsequent blocks.
@@ -593,6 +678,15 @@ pub fn pcbc_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// [`pcbc_enc`]: ../aes_with_operation_mode/fn.pcbc_enc.html
 pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let decryptor = select_decrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    let block_number = cipher.len() / BLOCKSIZE_IN_BYTES;
+    assert!(
+        plain.len() >= block_number * BLOCKSIZE_IN_BYTES,
+        "Output buffer is too short."
+    );
+    if block_number == 0 {
+        return iv.to_vec();
+    }
     let mut buffer = vec![0; BLOCKSIZE_IN_BYTES];
     // The 1st (head) block
     decryptor(&cipher[..BLOCKSIZE_IN_BYTES], &mut buffer, keys);
@@ -600,10 +694,9 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
         plain[j] = iv[j] ^ buffer[j];
     }
     // The other block
-    let block_number = cipher.len() >> 4;
     let mut start = 0;
-    for i in 1usize..block_number {
-        start = i << 4;
+    for i in 1..block_number {
+        start = i * BLOCKSIZE_IN_BYTES;
         decryptor(
             &cipher[start..(start + BLOCKSIZE_IN_BYTES)],
             &mut buffer,
@@ -621,6 +714,9 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
     buffer
 }
 /// CFB (Cipher Feedback) Encryption with 8-bit feedback size (**Experimental**)
+///
+/// Returns the last AES output block for nonempty input, or the unchanged IV for
+/// empty input. The nonempty return value is not the updated feedback register.
 /// # Examples
 /// ```
 /// use aes_frast::{aes_core, aes_with_operation_mode};
@@ -671,6 +767,11 @@ pub fn pcbc_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec
 /// ```
 pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    assert!(cipher.len() >= plain.len(), "Output buffer is too short.");
+    if plain.is_empty() {
+        return iv.to_vec();
+    }
     let mut out_buffer = vec![0; BLOCKSIZE_IN_BYTES];
     let mut in_buffer = iv.to_owned();
     for i in 0..plain.len() {
@@ -682,12 +783,20 @@ pub fn cfb_8_enc(plain: &[u8], cipher: &mut [u8], keys: &[u32], iv: &[u8]) -> Ve
     out_buffer
 }
 /// CFB (Cipher Feedback) Decryption with 8-bit feedback size (**Experimental**)
+///
+/// Returns the last AES output block for nonempty input, or the unchanged IV for
+/// empty input. The nonempty return value is not the updated feedback register.
 /// # Examples
 /// Please refer to the [`cfb_8_enc`] function, codes are included there.
 ///
 /// [`cfb_8_enc`]: ../aes_with_operation_mode/fn.cfb_8_enc.html
 pub fn cfb_8_dec(cipher: &[u8], plain: &mut [u8], keys: &[u32], iv: &[u8]) -> Vec<u8> {
     let encryptor = select_encrypt_function!(keys);
+    assert_eq!(iv.len(), BLOCKSIZE_IN_BYTES, "Invalid IV length.");
+    assert!(plain.len() >= cipher.len(), "Output buffer is too short.");
+    if cipher.is_empty() {
+        return iv.to_vec();
+    }
     let mut out_buffer = vec![0; BLOCKSIZE_IN_BYTES];
     let mut in_buffer = iv.to_owned();
     for i in 0..cipher.len() {

@@ -21,7 +21,7 @@ use super::aes_core::BLOCKSIZE_IN_BYTES;
 ///                         0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8, 0x09u8]);
 /// ```
 pub fn pa_pkcs7(input_vec: &mut Vec<u8>) -> usize {
-    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() % BLOCKSIZE_IN_BYTES);
     input_vec.append(&mut vec![r as u8; r]);
     r
 }
@@ -43,7 +43,7 @@ pub fn pa_pkcs7(input_vec: &mut Vec<u8>) -> usize {
 ///                         0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x09u8]);
 /// ```
 pub fn pa_ansix923(input_vec: &mut Vec<u8>) -> usize {
-    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() % BLOCKSIZE_IN_BYTES);
     let mut tail = vec![0u8; r];
     *tail.last_mut().unwrap() = r as u8;
     input_vec.append(&mut tail);
@@ -119,7 +119,7 @@ pub fn de_ansix923_pkcs7(input_vec: &mut Vec<u8>) -> usize {
 ///
 /// [`pa_zeros_ifnotcomplete`]: ../padding_128bit/fn.pa_zeros_ifnotcomplete.html
 pub fn pa_zeros(input_vec: &mut Vec<u8>) -> usize {
-    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() % BLOCKSIZE_IN_BYTES);
     input_vec.append(&mut vec![0u8; r]);
     r
 }
@@ -158,7 +158,7 @@ pub fn pa_zeros(input_vec: &mut Vec<u8>) -> usize {
 ///
 /// [`pa_zeros`]: ../padding_128bit/fn.pa_zeros.html
 pub fn pa_zeros_ifnotcomplete(input_vec: &mut Vec<u8>) -> usize {
-    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() & 0b1111);
+    let r = BLOCKSIZE_IN_BYTES - (input_vec.len() % BLOCKSIZE_IN_BYTES);
     if r < BLOCKSIZE_IN_BYTES {
         input_vec.append(&mut vec![0u8; r]);
         r
@@ -172,7 +172,9 @@ pub fn pa_zeros_ifnotcomplete(input_vec: &mut Vec<u8>) -> usize {
 /// * *parameter* `input_vec`: the vec that contains original data.
 /// * *return* : the removed bytes' length.
 ///
-/// **Attention!** If the origin data ends with zero(s) (one or more 0xFF), depadding will remove
+/// An empty vector is left unchanged and returns 0. An all-zero vector is cleared.
+///
+/// **Attention!** If the origin data ends with zero(s) (one or more 0x00), depadding will remove
 /// all these zeros.
 /// # Examples
 /// ```
@@ -187,19 +189,16 @@ pub fn pa_zeros_ifnotcomplete(input_vec: &mut Vec<u8>) -> usize {
 /// assert_eq!(zeros, vec![0xFFu8; 7]);
 /// ```
 pub fn de_zeros(input_vec: &mut Vec<u8>) -> usize {
-    let mut tmp: u8;
-    let mut count = 0;
-    loop {
-        tmp = input_vec.pop().unwrap();
-        if tmp != 0 {
-            input_vec.push(tmp);
-            break count;
-        }
-        count += 1;
+    let original_len = input_vec.len();
+    while input_vec.last() == Some(&0) {
+        input_vec.pop();
     }
+    original_len - input_vec.len()
 }
 
 /// Drop the last incomplete or complete block.
+///
+/// An empty vector is left unchanged and returns 0.
 ///
 /// * *parameter* `input_vec`: the vec that contains original data.
 /// * *return* : the removed bytes' length.
@@ -222,7 +221,10 @@ pub fn de_zeros(input_vec: &mut Vec<u8>) -> usize {
 /// assert_eq!(origin, vec![0xFFu8; 16]);
 /// ```
 pub fn drop_last_block(input_vec: &mut Vec<u8>) -> usize {
-    let r = match input_vec.len() & 0b1111 {
+    if input_vec.is_empty() {
+        return 0;
+    }
+    let r = match input_vec.len() % BLOCKSIZE_IN_BYTES {
         0 => BLOCKSIZE_IN_BYTES,
         r => r,
     };
