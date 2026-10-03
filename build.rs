@@ -10,10 +10,10 @@ fn main() {
     std::fs::write(dest_path, tables_txt).unwrap();
 }
 fn calculate_tables() -> String {
-    use crate::aes_affine_mapping::aes_sbox_affine_mapping as affine_mapping;
-    use crate::aes_affine_mapping::aes_sbox_inverse_affine_mapping as inverse_mapping;
-    use crate::gf28::GF2_8;
-    use crate::t_box::*;
+    use self::aes_affine_mapping::aes_sbox_affine_mapping as affine_mapping;
+    use self::aes_affine_mapping::aes_sbox_inverse_affine_mapping as inverse_mapping;
+    use self::gf28::GF2_8;
+    use self::t_box::*;
     // A GF2_8 for computing the tables.
     let mut gf = GF2_8::default();
     // Another two GF2_8 for storing the S-Boxed `gf` and inverse-S-Boxed `gf`.

@@ -13,10 +13,6 @@ keywords = ["crypto", "aes"]
 
 [dependencies]
 
-[[test]]
-name = "build_script"
-path = "build.rs"
-
 [profile.release]
 codegen-units = 1
 lto = true
